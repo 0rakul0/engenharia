@@ -1,0 +1,3231 @@
+import re
+from util.StringUtil import remove_varios_espacos, remove_acentos,remove_caracteres_especiais
+from bs4 import BeautifulSoup as bs
+import requests
+from datetime import datetime, date
+import time
+import os
+from pdjus.modelo.CnaeSetor import CnaeSetor
+from pdjus.dal.CnaeDao import CnaeDao
+from pdjus.dal.SetorDao import SetorDao
+from pdjus.dal.CnaeSetorDao import CnaeSetorDao
+import pandas as pd
+
+class ClassificaCNAE:
+    def __init__(self):
+        # TERMO SE CONTÉM MAIS DE UMA PALAVRA É SEPARADO POR +
+        self.cnae_23 = 'https://cnae.ibge.gov.br/?option=com_cnae&view=atividades&Itemid=6160&tipo=cnae&chave={TERMO}&versao_classe=7.0.0&versao_subclasse=10.1.0'
+        self.cnae_22 = 'https://cnae.ibge.gov.br/?option=com_cnae&view=atividades&Itemid=6160&tipo=cnae&chave={TERMO}&versao_classe=7.0.0&versao_subclasse=9.1.1'
+        self.cnae_21 = 'https://cnae.ibge.gov.br/?option=com_cnae&view=atividades&Itemid=6160&tipo=cnae&chave={TERMO}&versao_classe=7.0.0&versao_subclasse=8.1.1'
+        self.cnae_20 = 'https://cnae.ibge.gov.br/?option=com_cnae&view=atividades&Itemid=6160&tipo=cnae&chave={TERMO}&versao_classe=5.0.1&versao_subclasse=6.1.1'
+        self.cnae_11 = 'https://cnae.ibge.gov.br/?option=com_cnae&view=atividades&Itemid=6160&tipo=cnae&chave={TERMO}&versao_classe=3.0.1&versao_subclasse=4.1.1'
+        self.cnae_10 = 'https://cnae.ibge.gov.br/?option=com_cnae&view=atividades&Itemid=6160&tipo=cnae&chave={TERMO}&versao_classe=1.0.1&versao_subclasse=2.1.1'
+        self.s = requests.Session()
+
+        self.lista_cnae_AD1 = ['5510','5590','5611','5612','5620','9001','9002','9003','9200','9321','9329','9311','9313','9319','9601','9602','9603','9609','8550','8591','8592','8593','8599']
+        self.lista_cnae_AD2 = ['6110','6120','6130','6141','6142','6143','6190','6201','6202','6203','6204','6209','6311','6319','5911','5912','5913','5914','5920','6010','6021','6022','5811','5812','5813','5819','5821','5822','5823','5829','6391','6399']
+        self.lista_cnae_AD3 = ['6911','6920','7020','7311','7312','7319','7320','7111','7112','7119','7120','7410','7420','7490','7711','7719','7721','7722','7723','7729','7731','7732','7733','7739','7740','7810','7820','7830','8011','8012','8020','8030','8111','8121','8122','8129','8130','8211','8219','8220','8230','8291','8292','8299','7911','7912','7990']
+        self.lista_cnae_AD4 = ['4912','4921','4923','4924','4929','4950','4930','4940','4922','4911','5022','5011','5012','5021','5030','5091','5099','5111','5112','5120','5211','5212','5221','5222','5223','5229','5231','5232','5239','5240','5250','5310','5320']
+        self.lista_cnae_AD5 = ['6810','6821','6822','4520','4543','9511','9512','9521','9529','6611','6612','6613','6619','6621','6622','6629','6630','0161','0162','0163','0230','3701','3702','3811','3812','3821','3822','3831','3832','3839','3900']
+        self.lista_cnae_pmc1 = ['4731','4732']
+        self.lista_cnae_pmc2 = ['4711']
+        self.lista_cnae_pmc3 = ['4712','4721','4722','4723','4724','4729']
+        self.lista_cnae_pmc4 = ['4755','4781','4782']
+        self.lista_cnae_pmc5 = ['4753','4754','4756','4759','4762']
+        self.lista_cnae_pmc6 = ['4771','4772','4773']
+        self.lista_cnae_pmc7 = ['4751','4752']
+        self.lista_cnae_pmc8 = ['4761']
+        self.lista_cnae_pmc9 = ['4713','4757','4763','4774','4783','4789']
+        self.lista_cnae_pmc10 = ['4511','4530','4541']
+        self.lista_cnae_pmc11 = ['4671', '4672', '4673','4674','4679','4741','4742','4743','4744']
+        self.lista_cnae_industria_extrativa = re.compile('^(0[5-9])')
+        self.lista_cnae_industria_transformacao = re.compile('^([12][0-9]|3[0-3])')
+        self.lista_cnae_agricultura = re.compile('^(0[1-3])')
+        self.lista_cnae_eletricidade = re.compile('^35')
+        self.lista_cnae_agua = re.compile('^(36|37|38|39)')
+        self.lista_cnae_construcao = re.compile('^(41|42|43)')
+        self.lista_cnae_comercio = re.compile('^(45|46|47)')
+        self.lista_cnae_transporte = re.compile('^(49|50|51|52|53)')
+        self.lista_cnae_alojamento = re.compile('^(55|56)')
+        self.lista_cnae_informacao = re.compile('^(58|59|60|61|62|63)')
+        self.lista_cnae_atividades_financeiras = re.compile('^(64|65|66)')
+        self.lista_cnae_atividades_imobiliarias = re.compile('^(68)')
+        self.lista_cnae_cientifica = re.compile('^(69|70|71|72|73|74|75)')
+        self.lista_cnae_atividade_administrativa = re.compile('^(77|78|79|80|81|82)')
+        self.lista_cnae_administracao = re.compile('^(84)')
+        self.lista_cnae_educacao = re.compile('^(85)')
+        self.lista_cnae_saude = re.compile('^(86|87|88)')
+        self.lista_cnae_artes = re.compile('^(90|91|92|93)')
+        self.lista_cnae_outras = re.compile('^(94|95|96)')
+        self.lista_cnae_domestico = re.compile('97')
+        self.lista_cnae_internacional = re.compile('^(99)')
+
+
+        self.dic_cnae_23 = {'0111-3/01': 'CULTIVO DE ARROZ',
+                       '0111-3/02': 'CULTIVO DE MILHO',
+                       '0111-3/03': 'CULTIVO DE TRIGO',
+                       '0111-3/99': 'CULTIVO DE OUTROS CEREAIS NAO ESPECIFICADOS ANTERIORMENTE',
+                       '0112-1/01': 'CULTIVO DE ALGODAO HERBACEO',
+                       '0112-1/02': 'CULTIVO DE JUTA',
+                       '0112-1/99': 'CULTIVO DE OUTRAS FIBRAS DE LAVOURA TEMPORARIA NAO ESPECIFICADAS ANTERIORMENTE',
+                       '0113-0/00': 'CULTIVO DE CANA DE ACUCAR',
+                       '0114-8/00': 'CULTIVO DE FUMO',
+                       '0115-6/00': 'CULTIVO DE SOJA',
+                       '0116-4/01': 'CULTIVO DE AMENDOIM',
+                       '0116-4/02': 'CULTIVO DE GIRASSOL',
+                       '0116-4/03': 'CULTIVO DE MAMONA',
+                       '0116-4/99': 'CULTIVO DE OUTRAS OLEAGINOSAS DE LAVOURA TEMPORARIA NAO ESPECIFICADAS ANTERIORMENTE',
+                       '0119-9/01': 'CULTIVO DE ABACAXI',
+                       '0119-9/02': 'CULTIVO DE ALHO',
+                       '0119-9/03': 'CULTIVO DE BATATA INGLESA',
+                       '0119-9/04': 'CULTIVO DE CEBOLA',
+                       '0119-9/05': 'CULTIVO DE FEIJAO',
+                       '0119-9/06': 'CULTIVO DE MANDIOCA',
+                       '0119-9/07': 'CULTIVO DE MELAO',
+                       '0119-9/08': 'CULTIVO DE MELANCIA',
+                       '0119-9/09': 'CULTIVO DE TOMATE RASTEIRO',
+                       '0119-9/99': 'CULTIVO DE OUTRAS PLANTAS DE LAVOURA TEMPORARIA NAO ESPECIFICADAS ANTERIORMENTE',
+                       '0121-1/01': 'HORTICULTURA, EXCETO MORANGO',
+                       '0121-1/02': 'CULTIVO DE MORANGO',
+                       '0122-9/00': 'CULTIVO DE FLORES E PLANTAS ORNAMENTAIS',
+                       '0131-8/00': 'CULTIVO DE LARANJA',
+                       '0132-6/00': 'CULTIVO DE UVA',
+                       '0133-4/01': 'CULTIVO DE ACAI',
+                       '0133-4/02': 'CULTIVO DE BANANA',
+                       '0133-4/03': 'CULTIVO DE CAJU',
+                       '0133-4/04': 'CULTIVO DE CITRICOS, EXCETO LARANJA',
+                       '0133-4/05': 'CULTIVO DE COCO DA BAIA',
+                       '0133-4/06': 'CULTIVO DE GUARANA',
+                       '0133-4/07': 'CULTIVO DE MACA',
+                       '0133-4/08': 'CULTIVO DE MAMAO',
+                       '0133-4/09': 'CULTIVO DE MARACUJA',
+                       '0133-4/10': 'CULTIVO DE MANGA',
+                       '0133-4/11': 'CULTIVO DE PESSEGO',
+                       '0133-4/99': 'CULTIVO DE FRUTAS DE LAVOURA PERMANENTE NAO ESPECIFICADAS ANTERIORMENTE',
+                       '0134-2/00': 'CULTIVO DE CAFE',
+                       '0135-1/00': 'CULTIVO DE CACAU',
+                       '0139-3/01': 'CULTIVO DE CHA DA INDIA',
+                       '0139-3/02': 'CULTIVO DE ERVA MATE',
+                       '0139-3/03': 'CULTIVO DE PIMENTA DO REINO',
+                       '0139-3/04': 'CULTIVO DE PLANTAS PARA CONDIMENTO, EXCETO PIMENTA DO REINO',
+                       '0139-3/05': 'CULTIVO DE DENDE',
+                       '0139-3/06': 'CULTIVO DE SERINGUEIRA',
+                       '0139-3/99': 'CULTIVO DE OUTRAS PLANTAS DE LAVOURA PERMANENTE NAO ESPECIFICADAS ANTERIORMENTE',
+                       '0141-5/01': 'PRODUCAO DE SEMENTES CERTIFICADAS, EXCETO DE FORRAGEIRAS PARA PASTO',
+                       '0141-5/02': 'PRODUCAO DE SEMENTES CERTIFICADAS DE FORRAGEIRAS PARA FORMACAO DE PASTO',
+                       '0142-3/00': 'PRODUCAO DE MUDAS E OUTRAS FORMAS DE PROPAGACAO VEGETAL, CERTIFICADAS',
+                       '0151-2/01': 'CRIACAO DE BOVINOS PARA CORTE',
+                       '0151-2/02': 'CRIACAO DE BOVINOS PARA LEITE',
+                       '0151-2/03': 'CRIACAO DE BOVINOS, EXCETO PARA CORTE E LEITE',
+                       '0152-1/01': 'CRIACAO DE BUFALINOS',
+                       '0152-1/02': 'CRIACAO DE EQUINOS',
+                       '0152-1/03': 'CRIACAO DE ASININOS E MUARES',
+                       '0153-9/01': 'CRIACAO DE CAPRINOS',
+                       '0153-9/02': 'CRIACAO DE OVINOS, INCLUSIVE PARA PRODUCAO DE LA',
+                       '0154-7/00': 'CRIACAO DE SUINOS',
+                       '0155-5/01': 'CRIACAO DE FRANGOS PARA CORTE',
+                       '0155-5/02': 'PRODUCAO DE PINTOS DE UM DIA',
+                       '0155-5/03': 'CRIACAO DE OUTROS GALINACEOS, EXCETO PARA CORTE',
+                       '0155-5/04': 'CRIACAO DE AVES, EXCETO GALINACEOS',
+                       '0155-5/05': 'PRODUCAO DE OVOS',
+                       '0159-8/01': 'APICULTURA',
+                       '0159-8/02': 'CRIACAO DE ANIMAIS DE ESTIMACAO',
+                       '0159-8/03': 'CRIACAO DE ESCARGO',
+                       '0159-8/04': 'CRIACAO DE BICHO DA SEDA',
+                       '0159-8/99': 'CRIACAO DE OUTROS ANIMAIS NAO ESPECIFICADOS ANTERIORMENTE',
+                       '0161-0/01': 'SERVICO DE PULVERIZACAO E CONTROLE DE PRAGAS AGRICOLAS',
+                       '0161-0/02': 'SERVICO DE PODA DE ARVORES PARA LAVOURAS',
+                       '0161-0/03': 'SERVICO DE PREPARACAO DE TERRENO, CULTIVO E COLHEITA',
+                       '0161-0/99': 'ATIVIDADES DE APOIO A AGRICULTURA NAO ESPECIFICADAS ANTERIORMENTE',
+                       '0162-8/01': 'SERVICO DE INSEMINACAO ARTIFICIAL EM ANIMAIS',
+                       '0162-8/02': 'SERVICO DE TOSQUIAMENTO DE OVINOS',
+                       '0162-8/03': 'SERVICO DE MANEJO DE ANIMAIS',
+                       '0162-8/99': 'ATIVIDADES DE APOIO A PECUARIA NAO ESPECIFICADAS ANTERIORMENTE',
+                       '0163-6/00': 'ATIVIDADES DE POS COLHEITA',
+                       '0170-9/00': 'CACA E SERVICOS RELACIONADOS',
+                       '0210-1/01': 'CULTIVO DE EUCALIPTO',
+                       '0210-1/02': 'CULTIVO DE ACACIA NEGRA',
+                       '0210-1/03': 'CULTIVO DE PINUS',
+                       '0210-1/04': 'CULTIVO DE TECA',
+                       '0210-1/05': 'CULTIVO DE ESPECIES MADEIREIRAS, EXCETO EUCALIPTO, ACACIA NEGRA, PINUS E TECA',
+                       '0210-1/06': 'CULTIVO DE MUDAS EM VIVEIROS FLORESTAIS',
+                       '0210-1/07': 'EXTRACAO DE MADEIRA EM FLORESTAS PLANTADAS',
+                       '0210-1/08': 'PRODUCAO DE CARVAO VEGETAL   FLORESTAS PLANTADAS',
+                       '0210-1/09': 'PRODUCAO DE CASCA DE ACACIA NEGRA   FLORESTAS PLANTADAS',
+                       '0210-1/99': 'PRODUCAO DE PRODUTOS NAO MADEIREIROS NAO ESPECIFICADOS ANTERIORMENTE EM FLORESTAS PLANTADAS',
+                       '0220-9/01': 'EXTRACAO DE MADEIRA EM FLORESTAS NATIVAS',
+                       '0220-9/02': 'PRODUCAO DE CARVAO VEGETAL   FLORESTAS NATIVAS',
+                       '0220-9/03': 'COLETA DE CASTANHA DO PARA EM FLORESTAS NATIVAS',
+                       '0220-9/04': 'COLETA DE LATEX EM FLORESTAS NATIVAS',
+                       '0220-9/05': 'COLETA DE PALMITO EM FLORESTAS NATIVAS',
+                       '0220-9/06': 'CONSERVACAO DE FLORESTAS NATIVAS',
+                       '0220-9/99': 'COLETA DE PRODUTOS NAO MADEIREIROS NAO ESPECIFICADOS ANTERIORMENTE EM FLORESTAS NATIVAS',
+                       '0230-6/00': 'ATIVIDADES DE APOIO A PRODUCAO FLORESTAL',
+                       '0311-6/01': 'PESCA DE PEIXES EM AGUA SALGADA',
+                       '0311-6/02': 'PESCA DE CRUSTACEOS E MOLUSCOS EM AGUA SALGADA',
+                       '0311-6/03': 'COLETA DE OUTROS PRODUTOS MARINHOS',
+                       '0311-6/04': 'ATIVIDADES DE APOIO A PESCA EM AGUA SALGADA',
+                       '0312-4/01': 'PESCA DE PEIXES EM AGUA DOCE',
+                       '0312-4/02': 'PESCA DE CRUSTACEOS E MOLUSCOS EM AGUA DOCE',
+                       '0312-4/03': 'COLETA DE OUTROS PRODUTOS AQUATICOS DE AGUA DOCE',
+                       '0312-4/04': 'ATIVIDADES DE APOIO A PESCA EM AGUA DOCE',
+                       '0321-3/01': 'CRIACAO DE PEIXES EM AGUA SALGADA E SALOBRA',
+                       '0321-3/02': 'CRIACAO DE CAMAROES EM AGUA SALGADA E SALOBRA',
+                       '0321-3/03': 'CRIACAO DE OSTRAS E MEXILHOES EM AGUA SALGADA E SALOBRA',
+                       '0321-3/04': 'CRIACAO DE PEIXES ORNAMENTAIS EM AGUA SALGADA E SALOBRA',
+                       '0321-3/05': 'ATIVIDADES DE APOIO A AQUICULTURA EM AGUA SALGADA E SALOBRA',
+                       '0321-3/99': 'CULTIVOS E SEMICULTIVOS DA AQUICULTURA EM AGUA SALGADA E SALOBRA NAO ESPECIFICADOS ANTERIORMENTE',
+                       '0322-1/01': 'CRIACAO DE PEIXES EM AGUA DOCE',
+                       '0322-1/02': 'CRIACAO DE CAMAROES EM AGUA DOCE',
+                       '0322-1/03': 'CRIACAO DE OSTRAS E MEXILHOES EM AGUA DOCE',
+                       '0322-1/04': 'CRIACAO DE PEIXES ORNAMENTAIS EM AGUA DOCE',
+                       '0322-1/05': 'RANICULTURA',
+                       '0322-1/06': 'CRIACAO DE JACARE',
+                       '0322-1/07': 'ATIVIDADES DE APOIO A AQUICULTURA EM AGUA DOCE',
+                       '0322-1/99': 'CULTIVOS E SEMICULTIVOS DA AQUICULTURA EM AGUA DOCE NAO ESPECIFICADOS ANTERIORMENTE',
+                       '0500-3/01': 'EXTRACAO DE CARVAO MINERAL',
+                       '0500-3/02': 'BENEFICIAMENTO DE CARVAO MINERAL',
+                       '0600-0/01': 'EXTRACAO DE PETROLEO E GAS NATURAL',
+                       '0600-0/02': 'EXTRACAO E BENEFICIAMENTO DE XISTO',
+                       '0600-0/03': 'EXTRACAO E BENEFICIAMENTO DE AREIAS BETUMINOSAS',
+                       '0710-3/01': 'EXTRACAO DE MINERIO DE FERRO',
+                       '0710-3/02': 'PELOTIZACAO, SINTERIZACAO E OUTROS BENEFICIAMENTOS DE MINERIO DE FERRO',
+                       '0721-9/01': 'EXTRACAO DE MINERIO DE ALUMINIO',
+                       '0721-9/02': 'BENEFICIAMENTO DE MINERIO DE ALUMINIO',
+                       '0722-7/01': 'EXTRACAO DE MINERIO DE ESTANHO',
+                       '0722-7/02': 'BENEFICIAMENTO DE MINERIO DE ESTANHO',
+                       '0723-5/01': 'EXTRACAO DE MINERIO DE MANGANES',
+                       '0723-5/02': 'BENEFICIAMENTO DE MINERIO DE MANGANES',
+                       '0724-3/01': 'EXTRACAO DE MINERIO DE METAIS PRECIOSOS',
+                       '0724-3/02': 'BENEFICIAMENTO DE MINERIO DE METAIS PRECIOSOS',
+                       '0725-1/00': 'EXTRACAO DE MINERAIS RADIOATIVOS',
+                       '0729-4/01': 'EXTRACAO DE MINERIOS DE NIOBIO E TITANIO',
+                       '0729-4/02': 'EXTRACAO DE MINERIO DE TUNGSTENIO',
+                       '0729-4/03': 'EXTRACAO DE MINERIO DE NIQUEL',
+                       '0729-4/04': 'EXTRACAO DE MINERIOS DE COBRE, CHUMBO, ZINCO E OUTROS MINERAIS METALICOS NAO FERROSOS NAO ESPECIFICADOS ANTERIORMENTE',
+                       '0729-4/05': 'BENEFICIAMENTO DE MINERIOS DE COBRE, CHUMBO, ZINCO E OUTROS MINERAIS METALICOS NAO FERROSOS NAO ESPECIFICADOS ANTERIORMENTE',
+                       '0810-0/01': 'EXTRACAO DE ARDOSIA E BENEFICIAMENTO ASSOCIADO',
+                       '0810-0/02': 'EXTRACAO DE GRANITO E BENEFICIAMENTO ASSOCIADO',
+                       '0810-0/03': 'EXTRACAO DE MARMORE E BENEFICIAMENTO ASSOCIADO',
+                       '0810-0/04': 'EXTRACAO DE CALCARIO E DOLOMITA E BENEFICIAMENTO ASSOCIADO',
+                       '0810-0/05': 'EXTRACAO DE GESSO E CAULIM',
+                       '0810-0/06': 'EXTRACAO DE AREIA, CASCALHO OU PEDREGULHO E BENEFICIAMENTO ASSOCIADO',
+                       '0810-0/07': 'EXTRACAO DE ARGILA E BENEFICIAMENTO ASSOCIADO',
+                       '0810-0/08': 'EXTRACAO DE SAIBRO E BENEFICIAMENTO ASSOCIADO',
+                       '0810-0/09': 'EXTRACAO DE BASALTO E BENEFICIAMENTO ASSOCIADO',
+                       '0810-0/10': 'BENEFICIAMENTO DE GESSO E CAULIM ASSOCIADO A EXTRACAO',
+                       '0810-0/99': 'EXTRACAO E BRITAMENTO DE PEDRAS E OUTROS MATERIAIS PARA CONSTRUCAO E BENEFICIAMENTO ASSOCIADO',
+                       '0891-6/00': 'EXTRACAO DE MINERAIS PARA FABRICACAO DE ADUBOS, FERTILIZANTES E OUTROS PRODUTOS QUIMICOS',
+                       '0892-4/01': 'EXTRACAO DE SAL MARINHO',
+                       '0892-4/02': 'EXTRACAO DE SAL GEMA',
+                       '0892-4/03': 'REFINO E OUTROS TRATAMENTOS DO SAL',
+                       '0893-2/00': 'EXTRACAO DE GEMAS (PEDRAS PRECIOSAS E SEMIPRECIOSAS)',
+                       '0899-1/01': 'EXTRACAO DE GRAFITA',
+                       '0899-1/02': 'EXTRACAO DE QUARTZO',
+                       '0899-1/03': 'EXTRACAO DE AMIANTO',
+                       '0899-1/99': 'EXTRACAO DE OUTROS MINERAIS NAO METALICOS NAO ESPECIFICADOS ANTERIORMENTE',
+                       '0910-6/00': 'ATIVIDADES DE APOIO A EXTRACAO DE PETROLEO E GAS NATURAL',
+                       '0990-4/01': 'ATIVIDADES DE APOIO A EXTRACAO DE MINERIO DE FERRO',
+                       '0990-4/02': 'ATIVIDADES DE APOIO A EXTRACAO DE MINERAIS METALICOS NAO FERROSOS',
+                       '0990-4/03': 'ATIVIDADES DE APOIO A EXTRACAO DE MINERAIS NAO METALICOS',
+                       '1011-2/01': 'FRIGORIFICO   ABATE DE BOVINOS',
+                       '1011-2/02': 'FRIGORIFICO   ABATE DE EQUINOS',
+                       '1011-2/03': 'FRIGORIFICO   ABATE DE OVINOS E CAPRINOS',
+                       '1011-2/04': 'FRIGORIFICO   ABATE DE BUFALINOS',
+                       '1011-2/05': 'MATADOURO   ABATE DE RESES SOB CONTRATO, EXCETO ABATE DE SUINOS',
+                       '1012-1/01': 'ABATE DE AVES',
+                       '1012-1/02': 'ABATE DE PEQUENOS ANIMAIS',
+                       '1012-1/03': 'FRIGORIFICO - ABATE DE SUINOS',
+                       '1012-1/04': 'MATADOURO - ABATE DE SUINOS SOB CONTRATO',
+                       '1013-9/01': 'FABRICACAO DE PRODUTOS DE CARNE',
+                       '1013-9/02': 'PREPARACAO DE SUBPRODUTOS DO ABATE',
+                       '1020-1/01': 'PRESERVACAO DE PEIXES, CRUSTACEOS E MOLUSCOS',
+                       '1020-1/02': 'FABRICACAO DE CONSERVAS DE PEIXES, CRUSTACEOS E MOLUSCOS',
+                       '1031-7/00': 'FABRICACAO DE CONSERVAS DE FRUTAS',
+                       '1032-5/01': 'FABRICACAO DE CONSERVAS DE PALMITO',
+                       '1032-5/99': 'FABRICACAO DE CONSERVAS DE LEGUMES E OUTROS VEGETAIS, EXCETO PALMITO',
+                       '1033-3/01': 'FABRICACAO DE SUCOS CONCENTRADOS DE FRUTAS, HORTALICAS E LEGUMES',
+                       '1033-3/02': 'FABRICACAO DE SUCOS DE FRUTAS, HORTALICAS E LEGUMES, EXCETO CONCENTRADOS',
+                       '1041-4/00': 'FABRICACAO DE OLEOS VEGETAIS EM BRUTO, EXCETO OLEO DE MILHO',
+                       '1042-2/00': 'FABRICACAO DE OLEOS VEGETAIS REFINADOS, EXCETO OLEO DE MILHO',
+                       '1043-1/00': 'FABRICACAO DE MARGARINA E OUTRAS GORDURAS VEGETAIS E DE OLEOS NAO-COMESTIVEIS DE ANIMAIS',
+                       '1051-1/00': 'PREPARACAO DO LEITE',
+                       '1052-0/00': 'FABRICACAO DE LATICINIOS',
+                       '1053-8/00': 'FABRICACAO DE SORVETES E OUTROS GELADOS COMESTIVEIS',
+                       '1061-9/01': 'BENEFICIAMENTO DE ARROZ',
+                       '1061-9/02': 'FABRICACAO DE PRODUTOS DO ARROZ',
+                       '1062-7/00': 'MOAGEM DE TRIGO E FABRICACAO DE DERIVADOS',
+                       '1063-5/00': 'FABRICACAO DE FARINHA DE MANDIOCA E DERIVADOS',
+                       '1064-3/00': 'FABRICACAO DE FARINHA DE MILHO E DERIVADOS, EXCETO OLEOS DE MILHO',
+                       '1065-1/01': 'FABRICACAO DE AMIDOS E FECULAS DE VEGETAIS',
+                       '1065-1/02': 'FABRICACAO DE OLEO DE MILHO EM BRUTO',
+                       '1065-1/03': 'FABRICACAO DE OLEO DE MILHO REFINADO',
+                       '1066-0/00': 'FABRICACAO DE ALIMENTOS PARA ANIMAIS',
+                       '1069-4/00': 'MOAGEM E FABRICACAO DE PRODUTOS DE ORIGEM VEGETAL NAO ESPECIFICADOS ANTERIORMENTE',
+                       '1071-6/00': 'FABRICACAO DE ACUCAR EM BRUTO',
+                       '1072-4/01': 'FABRICACAO DE ACUCAR DE CANA REFINADO',
+                       '1072-4/02': 'FABRICACAO DE ACUCAR DE CEREAIS (DEXTROSE, E DE BETERRABA)',
+                       '1081-3/01': 'BENEFICIAMENTO DE CAFE',
+                       '1081-3/02': 'TORREFACAO E MOAGEM DE CAFE',
+                       '1082-1/00': 'FABRICACAO DE PRODUTOS A BASE DE CAFE',
+                       '1091-1/01': 'FABRICACAO DE PRODUTOS DE PANIFICACAO INDUSTRIAL',
+                       '1091-1/02': 'FABRICACAO DE PRODUTOS DE PADARIA E CONFEITARIA COM PREDOMINANCIA DE PRODUCAO PROPRIA',
+                       '1092-9/00': 'FABRICACAO DE BISCOITOS E BOLACHAS',
+                       '1093-7/01': 'FABRICACAO DE PRODUTOS DERIVADOS DO CACAU E DE CHOCOLATES',
+                       '1093-7/02': 'FABRICACAO DE FRUTAS CRISTALIZADAS, BALAS E SEMELHANTES',
+                       '1094-5/00': 'FABRICACAO DE MASSAS ALIMENTICIAS',
+                       '1095-3/00': 'FABRICACAO DE ESPECIARIAS, MOLHOS, TEMPEROS E CONDIMENTOS',
+                       '1096-1/00': 'FABRICACAO DE ALIMENTOS E PRATOS PRONTOS',
+                       '1099-6/01': 'FABRICACAO DE VINAGRES',
+                       '1099-6/02': 'FABRICACAO DE POS ALIMENTICIOS',
+                       '1099-6/03': 'FABRICACAO DE FERMENTOS E LEVEDURAS',
+                       '1099-6/04': 'FABRICACAO DE GELO COMUM',
+                       '1099-6/05': 'FABRICACAO DE PRODUTOS PARA INFUSAO (CHA, MATE, ETC.)',
+                       '1099-6/06': 'FABRICACAO DE ADOCANTES NATURAIS E ARTIFICIAIS',
+                       '1099-6/07': 'FABRICACAO DE ALIMENTOS DIETETICOS E COMPLEMENTOS ALIMENTARES',
+                       '1099-6/99': 'FABRICACAO DE OUTROS PRODUTOS ALIMENTICIOS NAO ESPECIFICADOS ANTERIORMENTE',
+                       '1111-9/01': 'FABRICACAO DE AGUARDENTE DE CANA-DE-ACUCAR',
+                       '1111-9/02': 'FABRICACAO DE OUTRAS AGUARDENTES E BEBIDAS DESTILADAS',
+                       '1112-7/00': 'FABRICACAO DE VINHO',
+                       '1113-5/01': 'FABRICACAO DE MALTE, INCLUSIVE MALTE UISQUE',
+                       '1113-5/02': 'FABRICACAO DE CERVEJAS E CHOPES',
+                       '1121-6/00': 'FABRICACAO DE AGUAS ENVASADAS',
+                       '1122-4/01': 'FABRICACAO DE REFRIGERANTES',
+                       '1122-4/02': 'FABRICACAO DE CHA MATE E OUTROS CHAS PRONTOS PARA CONSUMO',
+                       '1122-4/03': 'FABRICACAO DE REFRESCOS, XAROPES E POS PARA REFRESCOS, EXCETO REFRESCOS DE FRUTAS',
+                       '1122-4/04': 'FABRICACAO DE BEBIDAS ISOTONICAS',
+                       '1122-4/99': 'FABRICACAO DE OUTRAS BEBIDAS NAO-ALCOOLICAS NAO ESPECIFICADAS ANTERIORMENTE',
+                       '1210-7/00': 'PROCESSAMENTO INDUSTRIAL DO FUMO',
+                       '1220-4/01': 'FABRICACAO DE CIGARROS',
+                       '1220-4/02': 'FABRICACAO DE CIGARRILHAS E CHARUTOS',
+                       '1220-4/03': 'FABRICACAO DE FILTROS PARA CIGARROS',
+                       '1220-4/99': 'FABRICACAO DE OUTROS PRODUTOS DO FUMO, EXCETO CIGARROS, CIGARRILHAS E CHARUTOS',
+                       '1311-1/00': 'PREPARACAO E FIACAO DE FIBRAS DE ALGODAO',
+                       '1312-0/00': 'PREPARACAO E FIACAO DE FIBRAS TEXTEIS NATURAIS, EXCETO ALGODAO',
+                       '1313-8/00': 'FIACAO DE FIBRAS ARTIFICIAIS E SINTETICAS',
+                       '1314-6/00': 'FABRICACAO DE LINHAS PARA COSTURAR E BORDAR',
+                       '1321-9/00': 'TECELAGEM DE FIOS DE ALGODAO',
+                       '1322-7/00': 'TECELAGEM DE FIOS DE FIBRAS TEXTEIS NATURAIS, EXCETO ALGODAO',
+                       '1323-5/00': 'TECELAGEM DE FIOS DE FIBRAS ARTIFICIAIS E SINTETICAS',
+                       '1330-8/00': 'FABRICACAO DE TECIDOS DE MALHA',
+                       '1340-5/01': 'ESTAMPARIA E TEXTURIZACAO EM FIOS, TECIDOS, ARTEFATOS TEXTEIS E PECAS DO VESTUARIO',
+                       '1340-5/02': 'ALVEJAMENTO, TINGIMENTO E TORCAO EM FIOS, TECIDOS, ARTEFATOS TEXTEIS E PECAS DO VESTUARIO',
+                       '1340-5/99': 'OUTROS SERVICOS DE ACABAMENTO EM FIOS, TECIDOS, ARTEFATOS TEXTEIS E PECAS DO VESTUARIO',
+                       '1351-1/00': 'FABRICACAO DE ARTEFATOS TEXTEIS PARA USO DOMESTICO',
+                       '1352-9/00': 'FABRICACAO DE ARTEFATOS DE TAPECARIA',
+                       '1353-7/00': 'FABRICACAO DE ARTEFATOS DE CORDOARIA',
+                       '1354-5/00': 'FABRICACAO DE TECIDOS ESPECIAIS, INCLUSIVE ARTEFATOS',
+                       '1359-6/00': 'FABRICACAO DE OUTROS PRODUTOS TEXTEIS NAO ESPECIFICADOS ANTERIORMENTE',
+                       '1411-8/01': 'CONFECCAO DE ROUPAS INTIMAS',
+                       '1411-8/02': 'FACCAO DE ROUPAS INTIMAS',
+                       '1412-6/01': 'CONFECCAO DE PECAS DO VESTUARIO, EXCETO ROUPAS INTIMAS E AS CONFECCIONADAS SOB MEDIDA',
+                       '1412-6/02': 'CONFECCAO, SOB MEDIDA, DE PECAS DO VESTUARIO, EXCETO ROUPAS INTIMAS',
+                       '1412-6/03': 'FACCAO DE PECAS DO VESTUARIO, EXCETO ROUPAS INTIMAS',
+                       '1413-4/01': 'CONFECCAO DE ROUPAS PROFISSIONAIS, EXCETO SOB MEDIDA',
+                       '1413-4/02': 'CONFECCAO, SOB MEDIDA, DE ROUPAS PROFISSIONAIS',
+                       '1413-4/03': 'FACCAO DE ROUPAS PROFISSIONAIS',
+                       '1414-2/00': 'FABRICACAO DE ACESSORIOS DO VESTUARIO, EXCETO PARA SEGURANCA E PROTECAO',
+                       '1421-5/00': 'FABRICACAO DE MEIAS',
+                       '1422-3/00': 'FABRICACAO DE ARTIGOS DO VESTUARIO, PRODUZIDOS EM MALHARIAS E TRICOTAGENS, EXCETO MEIAS',
+                       '1510-6/00': 'CURTIMENTO E OUTRAS PREPARACOES DE COURO',
+                       '1521-1/00': 'FABRICACAO DE ARTIGOS PARA VIAGEM, BOLSAS E SEMELHANTES DE QUALQUER MATERIAL',
+                       '1529-7/00': 'FABRICACAO DE ARTEFATOS DE COURO NAO ESPECIFICADOS ANTERIORMENTE',
+                       '1531-9/01': 'FABRICACAO DE CALCADOS DE COURO',
+                       '1531-9/02': 'ACABAMENTO DE CALCADOS DE COURO SOB CONTRATO',
+                       '1532-7/00': 'FABRICACAO DE TENIS DE QUALQUER MATERIAL',
+                       '1533-5/00': 'FABRICACAO DE CALCADOS DE MATERIAL SINTETICO',
+                       '1539-4/00': 'FABRICACAO DE CALCADOS DE MATERIAIS NAO ESPECIFICADOS ANTERIORMENTE',
+                       '1540-8/00': 'FABRICACAO DE PARTES PARA CALCADOS, DE QUALQUER MATERIAL',
+                       '1610-2/01': 'SERRARIAS COM DESDOBRAMENTO DE MADEIRA',
+                       '1610-2/02': 'SERRARIAS SEM DESDOBRAMENTO DE MADEIRA',
+                       '1621-8/00': 'FABRICACAO DE MADEIRA LAMINADA E DE CHAPAS DE MADEIRA COMPENSADA, PRENSADA E AGLOMERADA',
+                       '1622-6/01': 'FABRICACAO DE CASAS DE MADEIRA PRE-FABRICADAS',
+                       '1622-6/02': 'FABRICACAO DE ESQUADRIAS DE MADEIRA E DE PECAS DE MADEIRA PARA INSTALACOES INDUSTRIAIS E COMERCIAIS',
+                       '1622-6/99': 'FABRICACAO DE OUTROS ARTIGOS DE CARPINTARIA PARA CONSTRUCAO',
+                       '1623-4/00': 'FABRICACAO DE ARTEFATOS DE TANOARIA E DE EMBALAGENS DE MADEIRA',
+                       '1629-3/01': 'FABRICACAO DE ARTEFATOS DIVERSOS DE MADEIRA, EXCETO MOVEIS',
+                       '1629-3/02': 'FABRICACAO DE ARTEFATOS DIVERSOS DE CORTICA, BAMBU, PALHA, VIME E OUTROS MATERIAIS TRANCADOS, EXCETO MOVEIS',
+                       '1710-9/00': 'FABRICACAO DE CELULOSE E OUTRAS PASTAS PARA A FABRICACAO DE PAPEL',
+                       '1721-4/00': 'FABRICACAO DE PAPEL',
+                       '1722-2/00': 'FABRICACAO DE CARTOLINA E PAPEL-CARTAO',
+                       '1731-1/00': 'FABRICACAO DE EMBALAGENS DE PAPEL',
+                       '1732-0/00': 'FABRICACAO DE EMBALAGENS DE CARTOLINA E PAPEL-CARTAO',
+                       '1733-8/00': 'FABRICACAO DE CHAPAS E DE EMBALAGENS DE PAPELAO ONDULADO',
+                       '1741-9/01': 'FABRICACAO DE FORMULARIOS CONTINUOS',
+                       '1741-9/02': 'FABRICACAO DE PRODUTOS DE PAPEL, CARTOLINA, PAPEL-CARTAO E PAPELAO ONDULADO PARA USO COMERCIAL E DE ESCRITORIO',
+                       '1742-7/01': 'FABRICACAO DE FRALDAS DESCARTAVEIS',
+                       '1742-7/02': 'FABRICACAO DE ABSORVENTES HIGIENICOS',
+                       '1742-7/99': 'FABRICACAO DE PRODUTOS DE PAPEL PARA USO DOMESTICO E HIGIENICO-SANITARIO NAO ESPECIFICADOS ANTERIORMENTE',
+                       '1749-4/00': 'FABRICACAO DE PRODUTOS DE PASTAS CELULOSICAS, PAPEL, CARTOLINA, PAPEL-CARTAO E PAPELAO ONDULADO NAO ESPECIFICADOS ANTERIORMENTE',
+                       '1811-3/01': 'IMPRESSAO DE JORNAIS',
+                       '1811-3/02': 'IMPRESSAO DE LIVROS, REVISTAS E OUTRAS PUBLICACOES PERIODICAS',
+                       '1812-1/00': 'IMPRESSAO DE MATERIAL DE SEGURANCA',
+                       '1813-0/01': 'IMPRESSAO DE MATERIAL PARA USO PUBLICITARIO',
+                       '1813-0/99': 'IMPRESSAO DE MATERIAL PARA OUTROS USOS',
+                       '1821-1/00': 'SERVICOS DE PRE-IMPRESSAO',
+                       '1822-9/01': 'SERVICOS DE ENCADERNACAO E PLASTIFICACAO',
+                       '1822-9/99': 'SERVICOS DE ACABAMENTOS GRAFICOS, EXCETO ENCADERNACAO E PLASTIFICACAO',
+                       '1830-0/01': 'REPRODUCAO DE SOM EM QUALQUER SUPORTE',
+                       '1830-0/02': 'REPRODUCAO DE VIDEO EM QUALQUER SUPORTE',
+                       '1830-0/03': 'REPRODUCAO DE SOFTWARE EM QUALQUER SUPORTE',
+                       '1910-1/00': 'COQUERIAS',
+                       '1921-7/00': 'FABRICACAO DE PRODUTOS DO REFINO DE PETROLEO',
+                       '1922-5/01': 'FORMULACAO DE COMBUSTIVEIS',
+                       '1922-5/02': 'RERREFINO DE OLEOS LUBRIFICANTES',
+                       '1922-5/99': 'FABRICACAO DE OUTROS PRODUTOS DERIVADOS DO PETROLEO, EXCETO PRODUTOS DO REFINO',
+                       '1931-4/00': 'FABRICACAO DE ALCOOL',
+                       '1932-2/00': 'FABRICACAO DE BIOCOMBUSTIVEIS, EXCETO ALCOOL',
+                       '2011-8/00': 'FABRICACAO DE CLORO E ALCALIS',
+                       '2012-6/00': 'FABRICACAO DE INTERMEDIARIOS PARA FERTILIZANTES',
+                       '2013-4/01': 'FABRICACAO DE ADUBOS E FERTILIZANTES ORGANO-MINERAIS',
+                       '2013-4/02': 'FABRICACAO DE ADUBOS E FERTILIZANTES, EXCETO ORGANO-MINERAIS',
+                       '2014-2/00': 'FABRICACAO DE GASES INDUSTRIAIS',
+                       '2019-3/01': 'ELABORACAO DE COMBUSTIVEIS NUCLEARES',
+                       '2019-3/99': 'FABRICACAO DE OUTROS PRODUTOS QUIMICOS INORGANICOS NAO ESPECIFICADOS ANTERIORMENTE',
+                       '2021-5/00': 'FABRICACAO DE PRODUTOS PETROQUIMICOS BASICOS',
+                       '2022-3/00': 'FABRICACAO DE INTERMEDIARIOS PARA PLASTIFICANTES, RESINAS E FIBRAS',
+                       '2029-1/00': 'FABRICACAO DE PRODUTOS QUIMICOS ORGANICOS NAO ESPECIFICADOS ANTERIORMENTE',
+                       '2031-2/00': 'FABRICACAO DE RESINAS TERMOPLASTICAS',
+                       '2032-1/00': 'FABRICACAO DE RESINAS TERMOFIXAS',
+                       '2033-9/00': 'FABRICACAO DE ELASTOMEROS',
+                       '2040-1/00': 'FABRICACAO DE FIBRAS ARTIFICIAIS E SINTETICAS',
+                       '2051-7/00': 'FABRICACAO DE DEFENSIVOS AGRICOLAS',
+                       '2052-5/00': 'FABRICACAO DE DESINFESTANTES DOMISSANITARIOS',
+                       '2061-4/00': 'FABRICACAO DE SABOES E DETERGENTES SINTETICOS',
+                       '2062-2/00': 'FABRICACAO DE PRODUTOS DE LIMPEZA E POLIMENTO',
+                       '2063-1/00': 'FABRICACAO DE COSMETICOS, PRODUTOS DE PERFUMARIA E DE HIGIENE PESSOAL',
+                       '2071-1/00': 'FABRICACAO DE TINTAS, VERNIZES, ESMALTES E LACAS',
+                       '2072-0/00': 'FABRICACAO DE TINTAS DE IMPRESSAO',
+                       '2073-8/00': 'FABRICACAO DE IMPERMEABILIZANTES, SOLVENTES E PRODUTOS AFINS',
+                       '2091-6/00': 'FABRICACAO DE ADESIVOS E SELANTES',
+                       '2092-4/01': 'FABRICACAO DE POLVORAS, EXPLOSIVOS E DETONANTES',
+                       '2092-4/02': 'FABRICACAO DE ARTIGOS PIROTECNICOS',
+                       '2092-4/03': 'FABRICACAO DE FOSFOROS DE SEGURANCA',
+                       '2093-2/00': 'FABRICACAO DE ADITIVOS DE USO INDUSTRIAL',
+                       '2094-1/00': 'FABRICACAO DE CATALISADORES',
+                       '2099-1/01': 'FABRICACAO DE CHAPAS, FILMES, PAPEIS E OUTROS MATERIAIS E PRODUTOS QUIMICOS PARA FOTOGRAFIA',
+                       '2099-1/99': 'FABRICACAO DE OUTROS PRODUTOS QUIMICOS NAO ESPECIFICADOS ANTERIORMENTE',
+                       '2110-6/00': 'FABRICACAO DE PRODUTOS FARMOQUIMICOS',
+                       '2121-1/01': 'FABRICACAO DE MEDICAMENTOS ALOPATICOS PARA USO HUMANO',
+                       '2121-1/02': 'FABRICACAO DE MEDICAMENTOS HOMEOPATICOS PARA USO HUMANO',
+                       '2121-1/03': 'FABRICACAO DE MEDICAMENTOS FITOTERAPICOS PARA USO HUMANO',
+                       '2122-0/00': 'FABRICACAO DE MEDICAMENTOS PARA USO VETERINARIO',
+                       '2123-8/00': 'FABRICACAO DE PREPARACOES FARMACEUTICAS',
+                       '2211-1/00': 'FABRICACAO DE PNEUMATICOS E DE CAMARAS-DE-AR',
+                       '2212-9/00': 'REFORMA DE PNEUMATICOS USADOS',
+                       '2219-6/00': 'FABRICACAO DE ARTEFATOS DE BORRACHA NAO ESPECIFICADOS ANTERIORMENTE',
+                       '2221-8/00': 'FABRICACAO DE LAMINADOS PLANOS E TUBULARES DE MATERIAL PLASTICO',
+                       '2222-6/00': 'FABRICACAO DE EMBALAGENS DE MATERIAL PLASTICO',
+                       '2223-4/00': 'FABRICACAO DE TUBOS E ACESSORIOS DE MATERIAL PLASTICO PARA USO NA CONSTRUCAO',
+                       '2229-3/01': 'FABRICACAO DE ARTEFATOS DE MATERIAL PLASTICO PARA USO PESSOAL E DOMESTICO',
+                       '2229-3/02': 'FABRICACAO DE ARTEFATOS DE MATERIAL PLASTICO PARA USOS INDUSTRIAIS',
+                       '2229-3/03': 'FABRICACAO DE ARTEFATOS DE MATERIAL PLASTICO PARA USO NA CONSTRUCAO, EXCETO TUBOS E ACESSORIOS',
+                       '2229-3/99': 'FABRICACAO DE ARTEFATOS DE MATERIAL PLASTICO PARA OUTROS USOS NAO ESPECIFICADOS ANTERIORMENTE',
+                       '2311-7/00': 'FABRICACAO DE VIDRO PLANO E DE SEGURANCA',
+                       '2312-5/00': 'FABRICACAO DE EMBALAGENS DE VIDRO',
+                       '2319-2/00': 'FABRICACAO DE ARTIGOS DE VIDRO',
+                       '2320-6/00': 'FABRICACAO DE CIMENTO',
+                       '2330-3/01': 'FABRICACAO DE ESTRUTURAS PRE-MOLDADAS DE CONCRETO ARMADO, EM SERIE E SOB ENCOMENDA',
+                       '2330-3/02': 'FABRICACAO DE ARTEFATOS DE CIMENTO PARA USO NA CONSTRUCAO',
+                       '2330-3/03': 'FABRICACAO DE ARTEFATOS DE FIBROCIMENTO PARA USO NA CONSTRUCAO',
+                       '2330-3/04': 'FABRICACAO DE CASAS PRE-MOLDADAS DE CONCRETO',
+                       '2330-3/05': 'PREPARACAO DE MASSA DE CONCRETO E ARGAMASSA PARA CONSTRUCAO',
+                       '2330-3/99': 'FABRICACAO DE OUTROS ARTEFATOS E PRODUTOS DE CONCRETO, CIMENTO, FIBROCIMENTO, GESSO E MATERIAIS SEMELHANTES',
+                       '2341-9/00': 'FABRICACAO DE PRODUTOS CERAMICOS REFRATARIOS',
+                       '2342-7/01': 'FABRICACAO DE AZULEJOS E PISOS',
+                       '2342-7/02': 'FABRICACAO DE ARTEFATOS DE CERAMICA E BARRO COZIDO PARA USO NA CONSTRUCAO, EXCETO AZULEJOS E PISOS',
+                       '2349-4/01': 'FABRICACAO DE MATERIAL SANITARIO DE CERAMICA',
+                       '2349-4/99': 'FABRICACAO DE PRODUTOS CERAMICOS NAO-REFRATARIOS NAO ESPECIFICADOS ANTERIORMENTE',
+                       '2391-5/01': 'BRITAMENTO DE PEDRAS, EXCETO ASSOCIADO A EXTRACAO',
+                       '2391-5/02': 'APARELHAMENTO DE PEDRAS PARA CONSTRUCAO, EXCETO ASSOCIADO A EXTRACAO',
+                       '2391-5/03': 'APARELHAMENTO DE PLACAS E EXECUCAO DE TRABALHOS EM MARMORE, GRANITO, ARDOSIA E OUTRAS PEDRAS',
+                       '2392-3/00': 'FABRICACAO DE CAL E GESSO',
+                       '2399-1/01': 'DECORACAO, LAPIDACAO, GRAVACAO, VITRIFICACAO E OUTROS TRABALHOS EM CERAMICA, LOUCA, VIDRO E CRISTAL',
+                       '2399-1/02': 'FABRICACAO DE ABRASIVOS',
+                       '2399-1/99': 'FABRICACAO DE OUTROS PRODUTOS DE MINERAIS NAO-METALICOS NAO ESPECIFICADOS ANTERIORMENTE',
+                       '2411-3/00': 'PRODUCAO DE FERRO-GUSA',
+                       '2412-1/00': 'PRODUCAO DE FERROLIGAS',
+                       '2421-1/00': 'PRODUCAO DE SEMI-ACABADOS DE ACO',
+                       '2422-9/01': 'PRODUCAO DE LAMINADOS PLANOS DE ACO AO CARBONO, REVESTIDOS OU NAO',
+                       '2422-9/02': 'PRODUCAO DE LAMINADOS PLANOS DE ACOS ESPECIAIS',
+                       '2423-7/01': 'PRODUCAO DE TUBOS DE ACO SEM COSTURA',
+                       '2423-7/02': 'PRODUCAO DE LAMINADOS LONGOS DE ACO, EXCETO TUBOS',
+                       '2424-5/01': 'PRODUCAO DE ARAMES DE ACO',
+                       '2424-5/02': 'PRODUCAO DE RELAMINADOS, TREFILADOS E PERFILADOS DE ACO, EXCETO ARAMES',
+                       '2431-8/00': 'PRODUCAO DE TUBOS DE ACO COM COSTURA',
+                       '2439-3/00': 'PRODUCAO DE OUTROS TUBOS DE FERRO E ACO',
+                       '2441-5/01': 'PRODUCAO DE ALUMINIO E SUAS LIGAS EM FORMAS PRIMARIAS',
+                       '2441-5/02': 'PRODUCAO DE LAMINADOS DE ALUMINIO',
+                       '2442-3/00': 'METALURGIA DOS METAIS PRECIOSOS',
+                       '2443-1/00': 'METALURGIA DO COBRE',
+                       '2449-1/01': 'PRODUCAO DE ZINCO EM FORMAS PRIMARIAS',
+                       '2449-1/02': 'PRODUCAO DE LAMINADOS DE ZINCO',
+                       '2449-1/03': 'PRODUCAO DE ANODOS PARA GALVANOPLASTIA',
+                       '2449-1/99': 'METALURGIA DE OUTROS METAIS NAO-FERROSOS E SUAS LIGAS NAO ESPECIFICADOS ANTERIORMENTE',
+                       '2451-2/00': 'FUNDICAO DE FERRO E ACO',
+                       '2452-1/00': 'FUNDICAO DE METAIS NAO-FERROSOS E SUAS LIGAS',
+                       '2511-0/00': 'FABRICACAO DE ESTRUTURAS METALICAS',
+                       '2512-8/00': 'FABRICACAO DE ESQUADRIAS DE METAL',
+                       '2513-6/00': 'FABRICACAO DE OBRAS DE CALDEIRARIA PESADA',
+                       '2521-7/00': 'FABRICACAO DE TANQUES, RESERVATORIOS METALICOS E CALDEIRAS PARA AQUECIMENTO CENTRAL',
+                       '2522-5/00': 'FABRICACAO DE CALDEIRAS GERADORAS DE VAPOR, EXCETO PARA AQUECIMENTO CENTRAL E PARA VEICULOS',
+                       '2531-4/01': 'PRODUCAO DE FORJADOS DE ACO',
+                       '2531-4/02': 'PRODUCAO DE FORJADOS DE METAIS NAO-FERROSOS E SUAS LIGAS',
+                       '2532-2/01': 'PRODUCAO DE ARTEFATOS ESTAMPADOS DE METAL',
+                       '2532-2/02': 'METALURGIA DO PO',
+                       '2539-0/01': 'SERVICOS DE USINAGEM, TORNEARIA E SOLDA',
+                       '2539-0/02': 'SERVICOS DE TRATAMENTO E REVESTIMENTO EM METAIS',
+                       '2541-1/00': 'FABRICACAO DE ARTIGOS DE CUTELARIA',
+                       '2542-0/00': 'FABRICACAO DE ARTIGOS DE SERRALHERIA, EXCETO ESQUADRIAS',
+                       '2543-8/00': 'FABRICACAO DE FERRAMENTAS',
+                       '2550-1/01': 'FABRICACAO DE EQUIPAMENTO BELICO PESADO, EXCETO VEICULOS MILITARES DE COMBATE',
+                       '2550-1/02': 'FABRICACAO DE ARMAS DE FOGO, OUTRAS ARMAS E MUNICOES',
+                       '2591-8/00': 'FABRICACAO DE EMBALAGENS METALICAS',
+                       '2592-6/01': 'FABRICACAO DE PRODUTOS DE TREFILADOS DE METAL PADRONIZADOS',
+                       '2592-6/02': 'FABRICACAO DE PRODUTOS DE TREFILADOS DE METAL, EXCETO PADRONIZADOS',
+                       '2593-4/00': 'FABRICACAO DE ARTIGOS DE METAL PARA USO DOMESTICO E PESSOAL',
+                       '2599-3/01': 'SERVICOS DE CONFECCAO DE ARMACOES METALICAS PARA A CONSTRUCAO',
+                       '2599-3/02': 'SERVICO DE CORTE E DOBRA DE METAIS',
+                       '2599-3/99': 'FABRICACAO DE OUTROS PRODUTOS DE METAL NAO ESPECIFICADOS ANTERIORMENTE',
+                       '2610-8/00': 'FABRICACAO DE COMPONENTES ELETRONICOS',
+                       '2621-3/00': 'FABRICACAO DE EQUIPAMENTOS DE INFORMATICA',
+                       '2622-1/00': 'FABRICACAO DE PERIFERICOS PARA EQUIPAMENTOS DE INFORMATICA',
+                       '2631-1/00': 'FABRICACAO DE EQUIPAMENTOS TRANSMISSORES DE COMUNICACAO, PECAS E ACESSORIOS',
+                       '2632-9/00': 'FABRICACAO DE APARELHOS TELEFONICOS E DE OUTROS EQUIPAMENTOS DE COMUNICACAO, PECAS E ACESSORIOS',
+                       '2640-0/00': 'FABRICACAO DE APARELHOS DE RECEPCAO, REPRODUCAO, GRAVACAO E AMPLIFICACAO DE AUDIO E VIDEO',
+                       '2651-5/00': 'FABRICACAO DE APARELHOS E EQUIPAMENTOS DE MEDIDA, TESTE E CONTROLE',
+                       '2652-3/00': 'FABRICACAO DE CRONOMETROS E RELOGIOS',
+                       '2660-4/00': 'FABRICACAO DE APARELHOS ELETROMEDICOS E ELETROTERAPEUTICOS E EQUIPAMENTOS DE IRRADIACAO',
+                       '2670-1/01': 'FABRICACAO DE EQUIPAMENTOS E INSTRUMENTOS OPTICOS, PECAS E ACESSORIOS',
+                       '2670-1/02': 'FABRICACAO DE APARELHOS FOTOGRAFICOS E CINEMATOGRAFICOS, PECAS E ACESSORIOS',
+                       '2680-9/00': 'FABRICACAO DE MIDIAS VIRGENS, MAGNETICAS E OPTICAS',
+                       '2710-4/01': 'FABRICACAO DE GERADORES DE CORRENTE CONTINUA E ALTERNADA, PECAS E ACESSORIOS',
+                       '2710-4/02': 'FABRICACAO DE TRANSFORMADORES, INDUTORES, CONVERSORES, SINCRONIZADORES E SEMELHANTES, PECAS E ACESSORIOS',
+                       '2710-4/03': 'FABRICACAO DE MOTORES ELETRICOS, PECAS E ACESSORIOS',
+                       '2721-0/00': 'FABRICACAO DE PILHAS, BATERIAS E ACUMULADORES ELETRICOS, EXCETO PARA VEICULOS AUTOMOTORES',
+                       '2722-8/01': 'FABRICACAO DE BATERIAS E ACUMULADORES PARA VEICULOS AUTOMOTORES',
+                       '2722-8/02': 'RECONDICIONAMENTO DE BATERIAS E ACUMULADORES PARA VEICULOS AUTOMOTORES',
+                       '2731-7/00': 'FABRICACAO DE APARELHOS E EQUIPAMENTOS PARA DISTRIBUICAO E CONTROLE DE ENERGIA ELETRICA',
+                       '2732-5/00': 'FABRICACAO DE MATERIAL ELETRICO PARA INSTALACOES EM CIRCUITO DE CONSUMO',
+                       '2733-3/00': 'FABRICACAO DE FIOS, CABOS E CONDUTORES ELETRICOS ISOLADOS',
+                       '2740-6/01': 'FABRICACAO DE LAMPADAS',
+                       '2740-6/02': 'FABRICACAO DE LUMINARIAS E OUTROS EQUIPAMENTOS DE ILUMINACAO',
+                       '2751-1/00': 'FABRICACAO DE FOGOES, REFRIGERADORES E MAQUINAS DE LAVAR E SECAR PARA USO DOMESTICO, PECAS E ACESSORIOS',
+                       '2759-7/01': 'FABRICACAO DE APARELHOS ELETRICOS DE USO PESSOAL, PECAS E ACESSORIOS',
+                       '2759-7/99': 'FABRICACAO DE OUTROS APARELHOS ELETRODOMESTICOS NAO ESPECIFICADOS ANTERIORMENTE, PECAS E ACESSORIOS',
+                       '2790-2/01': 'FABRICACAO DE ELETRODOS, CONTATOS E OUTROS ARTIGOS DE CARVAO E GRAFITA PARA USO ELETRICO, ELETROIMAS E ISOLADORES',
+                       '2790-2/02': 'FABRICACAO DE EQUIPAMENTOS PARA SINALIZACAO E ALARME',
+                       '2790-2/99': 'FABRICACAO DE OUTROS EQUIPAMENTOS E APARELHOS ELETRICOS NAO ESPECIFICADOS ANTERIORMENTE',
+                       '2811-9/00': 'FABRICACAO DE MOTORES E TURBINAS, PECAS E ACESSORIOS, EXCETO PARA AVIOES E VEICULOS RODOVIARIOS',
+                       '2812-7/00': 'FABRICACAO DE EQUIPAMENTOS HIDRAULICOS E PNEUMATICOS, PECAS E ACESSORIOS, EXCETO VALVULAS',
+                       '2813-5/00': 'FABRICACAO DE VALVULAS, REGISTROS E DISPOSITIVOS SEMELHANTES, PECAS E ACESSORIOS',
+                       '2814-3/01': 'FABRICACAO DE COMPRESSORES PARA USO INDUSTRIAL, PECAS E ACESSORIOS',
+                       '2814-3/02': 'FABRICACAO DE COMPRESSORES PARA USO NAO-INDUSTRIAL, PECAS E ACESSORIOS',
+                       '2815-1/01': 'FABRICACAO DE ROLAMENTOS PARA FINS INDUSTRIAIS',
+                       '2815-1/02': 'FABRICACAO DE EQUIPAMENTOS DE TRANSMISSAO PARA FINS INDUSTRIAIS, EXCETO ROLAMENTOS',
+                       '2821-6/01': 'FABRICACAO DE FORNOS INDUSTRIAIS, APARELHOS E EQUIPAMENTOS NAO-ELETRICOS PARA INSTALACOES TERMICAS, PECAS E ACESSORIOS',
+                       '2821-6/02': 'FABRICACAO DE ESTUFAS E FORNOS ELETRICOS PARA FINS INDUSTRIAIS, PECAS E ACESSORIOS',
+                       '2822-4/01': 'FABRICACAO DE MAQUINAS, EQUIPAMENTOS E APARELHOS PARA TRANSPORTE E ELEVACAO DE PESSOAS, PECAS E ACESSORIOS',
+                       '2822-4/02': 'FABRICACAO DE MAQUINAS, EQUIPAMENTOS E APARELHOS PARA TRANSPORTE E ELEVACAO DE CARGAS, PECAS E ACESSORIOS',
+                       '2823-2/00': 'FABRICACAO DE MAQUINAS E APARELHOS DE REFRIGERACAO E VENTILACAO PARA USO INDUSTRIAL E COMERCIAL, PECAS E ACESSORIOS',
+                       '2824-1/01': 'FABRICACAO DE APARELHOS E EQUIPAMENTOS DE AR CONDICIONADO PARA USO INDUSTRIAL',
+                       '2824-1/02': 'FABRICACAO DE APARELHOS E EQUIPAMENTOS DE AR CONDICIONADO PARA USO NAO-INDUSTRIAL',
+                       '2825-9/00': 'FABRICACAO DE MAQUINAS E EQUIPAMENTOS PARA SANEAMENTO BASICO E AMBIENTAL, PECAS E ACESSORIOS',
+                       '2829-1/01': 'FABRICACAO DE MAQUINAS DE ESCREVER, CALCULAR E OUTROS EQUIPAMENTOS NAO-ELETRONICOS PARA ESCRITORIO, PECAS E ACESSORIOS',
+                       '2829-1/99': 'FABRICACAO DE OUTRAS MAQUINAS E EQUIPAMENTOS DE USO GERAL NAO ESPECIFICADOS ANTERIORMENTE, PECAS E ACESSORIOS',
+                       '2831-3/00': 'FABRICACAO DE TRATORES AGRICOLAS, PECAS E ACESSORIOS',
+                       '2832-1/00': 'FABRICACAO DE EQUIPAMENTOS PARA IRRIGACAO AGRICOLA, PECAS E ACESSORIOS',
+                       '2833-0/00': 'FABRICACAO DE MAQUINAS E EQUIPAMENTOS PARA A AGRICULTURA E PECUARIA, PECAS E ACESSORIOS, EXCETO PARA IRRIGACAO',
+                       '2840-2/00': 'FABRICACAO DE MAQUINAS-FERRAMENTA, PECAS E ACESSORIOS',
+                       '2851-8/00': 'FABRICACAO DE MAQUINAS E EQUIPAMENTOS PARA A PROSPECCAO E EXTRACAO DE PETROLEO, PECAS E ACESSORIOS',
+                       '2852-6/00': 'FABRICACAO DE OUTRAS MAQUINAS E EQUIPAMENTOS PARA USO NA EXTRACAO MINERAL, PECAS E ACESSORIOS, EXCETO NA EXTRACAO DE PETROLEO',
+                       '2853-4/00': 'FABRICACAO DE TRATORES, PECAS E ACESSORIOS, EXCETO AGRICOLAS',
+                       '2854-2/00': 'FABRICACAO DE MAQUINAS E EQUIPAMENTOS PARA TERRAPLENAGEM, PAVIMENTACAO E CONSTRUCAO, PECAS E ACESSORIOS, EXCETO TRATORES',
+                       '2861-5/00': 'FABRICACAO DE MAQUINAS PARA A INDUSTRIA METALURGICA, PECAS E ACESSORIOS, EXCETO MAQUINAS-FERRAMENTA',
+                       '2862-3/00': 'FABRICACAO DE MAQUINAS E EQUIPAMENTOS PARA AS INDUSTRIAS DE ALIMENTOS, BEBIDAS E FUMO, PECAS E ACESSORIOS',
+                       '2863-1/00': 'FABRICACAO DE MAQUINAS E EQUIPAMENTOS PARA A INDUSTRIA TEXTIL, PECAS E ACESSORIOS',
+                       '2864-0/00': 'FABRICACAO DE MAQUINAS E EQUIPAMENTOS PARA AS INDUSTRIAS DO VESTUARIO, DO COURO E DE CALCADOS, PECAS E ACESSORIOS',
+                       '2865-8/00': 'FABRICACAO DE MAQUINAS E EQUIPAMENTOS PARA AS INDUSTRIAS DE CELULOSE, PAPEL E PAPELAO E ARTEFATOS, PECAS E ACESSORIOS',
+                       '2866-6/00': 'FABRICACAO DE MAQUINAS E EQUIPAMENTOS PARA A INDUSTRIA DO PLASTICO, PECAS E ACESSORIOS',
+                       '2869-1/00': 'FABRICACAO DE MAQUINAS E EQUIPAMENTOS PARA USO INDUSTRIAL ESPECIFICO NAO ESPECIFICADOS ANTERIORMENTE, PECAS E ACESSORIOS',
+                       '2910-7/01': 'FABRICACAO DE AUTOMOVEIS, CAMIONETAS E UTILITARIOS',
+                       '2910-7/02': 'FABRICACAO DE CHASSIS COM MOTOR PARA AUTOMOVEIS, CAMIONETAS E UTILITARIOS',
+                       '2910-7/03': 'FABRICACAO DE MOTORES PARA AUTOMOVEIS, CAMIONETAS E UTILITARIOS',
+                       '2920-4/01': 'FABRICACAO DE CAMINHOES E ONIBUS',
+                       '2920-4/02': 'FABRICACAO DE MOTORES PARA CAMINHOES E ONIBUS',
+                       '2930-1/01': 'FABRICACAO DE CABINES, CARROCERIAS E REBOQUES PARA CAMINHOES',
+                       '2930-1/02': 'FABRICACAO DE CARROCERIAS PARA ONIBUS',
+                       '2930-1/03': 'FABRICACAO DE CABINES, CARROCERIAS E REBOQUES PARA OUTROS VEICULOS AUTOMOTORES, EXCETO CAMINHOES E ONIBUS',
+                       '2941-7/00': 'FABRICACAO DE PECAS E ACESSORIOS PARA O SISTEMA MOTOR DE VEICULOS AUTOMOTORES',
+                       '2942-5/00': 'FABRICACAO DE PECAS E ACESSORIOS PARA OS SISTEMAS DE MARCHA E TRANSMISSAO DE VEICULOS AUTOMOTORES',
+                       '2943-3/00': 'FABRICACAO DE PECAS E ACESSORIOS PARA O SISTEMA DE FREIOS DE VEICULOS AUTOMOTORES',
+                       '2944-1/00': 'FABRICACAO DE PECAS E ACESSORIOS PARA O SISTEMA DE DIRECAO E SUSPENSAO DE VEICULOS AUTOMOTORES',
+                       '2945-0/00': 'FABRICACAO DE MATERIAL ELETRICO E ELETRONICO PARA VEICULOS AUTOMOTORES, EXCETO BATERIAS',
+                       '2949-2/01': 'FABRICACAO DE BANCOS E ESTOFADOS PARA VEICULOS AUTOMOTORES',
+                       '2949-2/99': 'FABRICACAO DE OUTRAS PECAS E ACESSORIOS PARA VEICULOS AUTOMOTORES NAO ESPECIFICADAS ANTERIORMENTE',
+                       '2950-6/00': 'RECONDICIONAMENTO E RECUPERACAO DE MOTORES PARA VEICULOS AUTOMOTORES',
+                       '3011-3/01': 'CONSTRUCAO DE EMBARCACOES DE GRANDE PORTE',
+                       '3011-3/02': 'CONSTRUCAO DE EMBARCACOES PARA USO COMERCIAL E PARA USOS ESPECIAIS, EXCETO DE GRANDE PORTE',
+                       '3012-1/00': 'CONSTRUCAO DE EMBARCACOES PARA ESPORTE E LAZER',
+                       '3031-8/00': 'FABRICACAO DE LOCOMOTIVAS, VAGOES E OUTROS MATERIAIS RODANTES',
+                       '3032-6/00': 'FABRICACAO DE PECAS E ACESSORIOS PARA VEICULOS FERROVIARIOS',
+                       '3041-5/00': 'FABRICACAO DE AERONAVES',
+                       '3042-3/00': 'FABRICACAO DE TURBINAS, MOTORES E OUTROS COMPONENTES E PECAS PARA AERONAVES',
+                       '3050-4/00': 'FABRICACAO DE VEICULOS MILITARES DE COMBATE',
+                       '3091-1/01': 'FABRICACAO DE MOTOCICLETAS',
+                       '3091-1/02': 'FABRICACAO DE PECAS E ACESSORIOS PARA MOTOCICLETAS',
+                       '3092-0/00': 'FABRICACAO DE BICICLETAS E TRICICLOS NAO-MOTORIZADOS, PECAS E ACESSORIOS',
+                       '3099-7/00': 'FABRICACAO DE EQUIPAMENTOS DE TRANSPORTE NAO ESPECIFICADOS ANTERIORMENTE',
+                       '3101-2/00': 'FABRICACAO DE MOVEIS COM PREDOMINANCIA DE MADEIRA',
+                       '3102-1/00': 'FABRICACAO DE MOVEIS COM PREDOMINANCIA DE METAL',
+                       '3103-9/00': 'FABRICACAO DE MOVEIS DE OUTROS MATERIAIS, EXCETO MADEIRA E METAL',
+                       '3104-7/00': 'FABRICACAO DE COLCHOES',
+                       '3211-6/01': 'LAPIDACAO DE GEMAS',
+                       '3211-6/02': 'FABRICACAO DE ARTEFATOS DE JOALHERIA E OURIVESARIA',
+                       '3211-6/03': 'CUNHAGEM DE MOEDAS E MEDALHAS',
+                       '3212-4/00': 'FABRICACAO DE BIJUTERIAS E ARTEFATOS SEMELHANTES',
+                       '3220-5/00': 'FABRICACAO DE INSTRUMENTOS MUSICAIS, PECAS E ACESSORIOS',
+                       '3230-2/00': 'FABRICACAO DE ARTEFATOS PARA PESCA E ESPORTE',
+                       '3240-0/01': 'FABRICACAO DE JOGOS ELETRONICOS',
+                       '3240-0/02': 'FABRICACAO DE MESAS DE BILHAR, DE SINUCA E ACESSORIOS NAO ASSOCIADA A LOCACAO',
+                       '3240-0/03': 'FABRICACAO DE MESAS DE BILHAR, DE SINUCA E ACESSORIOS ASSOCIADA A LOCACAO',
+                       '3240-0/99': 'FABRICACAO DE OUTROS BRINQUEDOS E JOGOS RECREATIVOS NAO ESPECIFICADOS ANTERIORMENTE',
+                       '3250-7/01': 'FABRICACAO DE INSTRUMENTOS NAO-ELETRONICOS E UTENSILIOS PARA USO MEDICO, CIRURGICO, ODONTOLOGICO E DE LABORATORIO',
+                       '3250-7/02': 'FABRICACAO DE MOBILIARIO PARA USO MEDICO, CIRURGICO, ODONTOLOGICO E DE LABORATORIO',
+                       '3250-7/03': 'FABRICACAO DE APARELHOS E UTENSILIOS PARA CORRECAO DE DEFEITOS FISICOS E APARELHOS ORTOPEDICOS EM GERAL SOB ENCOMENDA',
+                       '3250-7/04': 'FABRICACAO DE APARELHOS E UTENSILIOS PARA CORRECAO DE DEFEITOS FISICOS E APARELHOS ORTOPEDICOS EM GERAL, EXCETO SOB ENCOMENDA',
+                       '3250-7/05': 'FABRICACAO DE MATERIAIS PARA MEDICINA E ODONTOLOGIA',
+                       '3250-7/06': 'SERVICOS DE PROTESE DENTARIA',
+                       '3250-7/07': 'FABRICACAO DE ARTIGOS OPTICOS',
+                       '3250-7/09': 'SERVICO DE LABORATORIO OPTICO',
+                       '3291-4/00': 'FABRICACAO DE ESCOVAS, PINCEIS E VASSOURAS',
+                       '3292-2/01': 'FABRICACAO DE ROUPAS DE PROTECAO E SEGURANCA E RESISTENTES A FOGO',
+                       '3292-2/02': 'FABRICACAO DE EQUIPAMENTOS E ACESSORIOS PARA SEGURANCA PESSOAL E PROFISSIONAL',
+                       '3299-0/01': 'FABRICACAO DE GUARDA-CHUVAS E SIMILARES',
+                       '3299-0/02': 'FABRICACAO DE CANETAS, LAPIS E OUTROS ARTIGOS PARA ESCRITORIO',
+                       '3299-0/03': 'FABRICACAO DE LETRAS, LETREIROS E PLACAS DE QUALQUER MATERIAL, EXCETO LUMINOSOS',
+                       '3299-0/04': 'FABRICACAO DE PAINEIS E LETREIROS LUMINOSOS',
+                       '3299-0/05': 'FABRICACAO DE AVIAMENTOS PARA COSTURA',
+                       '3299-0/06': 'FABRICACAO DE VELAS, INCLUSIVE DECORATIVAS',
+                       '3299-0/99': 'FABRICACAO DE PRODUTOS DIVERSOS NAO ESPECIFICADOS ANTERIORMENTE',
+                       '3311-2/00': 'MANUTENCAO E REPARACAO DE TANQUES, RESERVATORIOS METALICOS E CALDEIRAS, EXCETO PARA VEICULOS',
+                       '3312-1/02': 'MANUTENCAO E REPARACAO DE APARELHOS E INSTRUMENTOS DE MEDIDA, TESTE E CONTROLE',
+                       '3312-1/03': 'MANUTENCAO E REPARACAO DE APARELHOS ELETROMEDICOS E ELETROTERAPEUTICOS E EQUIPAMENTOS DE IRRADIACAO',
+                       '3312-1/04': 'MANUTENCAO E REPARACAO DE EQUIPAMENTOS E INSTRUMENTOS OPTICOS',
+                       '3313-9/01': 'MANUTENCAO E REPARACAO DE GERADORES, TRANSFORMADORES E MOTORES ELETRICOS',
+                       '3313-9/02': 'MANUTENCAO E REPARACAO DE BATERIAS E ACUMULADORES ELETRICOS, EXCETO PARA VEICULOS',
+                       '3313-9/99': 'MANUTENCAO E REPARACAO DE MAQUINAS, APARELHOS E MATERIAIS ELETRICOS NAO ESPECIFICADOS ANTERIORMENTE',
+                       '3314-7/01': 'MANUTENCAO E REPARACAO DE MAQUINAS MOTRIZES NAO-ELETRICAS',
+                       '3314-7/02': 'MANUTENCAO E REPARACAO DE EQUIPAMENTOS HIDRAULICOS E PNEUMATICOS, EXCETO VALVULAS',
+                       '3314-7/03': 'MANUTENCAO E REPARACAO DE VALVULAS INDUSTRIAIS',
+                       '3314-7/04': 'MANUTENCAO E REPARACAO DE COMPRESSORES',
+                       '3314-7/05': 'MANUTENCAO E REPARACAO DE EQUIPAMENTOS DE TRANSMISSAO PARA FINS INDUSTRIAIS',
+                       '3314-7/06': 'MANUTENCAO E REPARACAO DE MAQUINAS, APARELHOS E EQUIPAMENTOS PARA INSTALACOES TERMICAS',
+                       '3314-7/07': 'MANUTENCAO E REPARACAO DE MAQUINAS E APARELHOS DE REFRIGERACAO E VENTILACAO PARA USO INDUSTRIAL E COMERCIAL',
+                       '3314-7/08': 'MANUTENCAO E REPARACAO DE MAQUINAS, EQUIPAMENTOS E APARELHOS PARA TRANSPORTE E ELEVACAO DE CARGAS',
+                       '3314-7/09': 'MANUTENCAO E REPARACAO DE MAQUINAS DE ESCREVER, CALCULAR E DE OUTROS EQUIPAMENTOS NAO-ELETRONICOS PARA ESCRITORIO',
+                       '3314-7/10': 'MANUTENCAO E REPARACAO DE MAQUINAS E EQUIPAMENTOS PARA USO GERAL NAO ESPECIFICADOS ANTERIORMENTE',
+                       '3314-7/11': 'MANUTENCAO E REPARACAO DE MAQUINAS E EQUIPAMENTOS PARA AGRICULTURA E PECUARIA',
+                       '3314-7/12': 'MANUTENCAO E REPARACAO DE TRATORES AGRICOLAS',
+                       '3314-7/13': 'MANUTENCAO E REPARACAO DE MAQUINAS-FERRAMENTA',
+                       '3314-7/14': 'MANUTENCAO E REPARACAO DE MAQUINAS E EQUIPAMENTOS PARA A PROSPECCAO E EXTRACAO DE PETROLEO',
+                       '3314-7/15': 'MANUTENCAO E REPARACAO DE MAQUINAS E EQUIPAMENTOS PARA USO NA EXTRACAO MINERAL, EXCETO NA EXTRACAO DE PETROLEO',
+                       '3314-7/16': 'MANUTENCAO E REPARACAO DE TRATORES, EXCETO AGRICOLAS',
+                       '3314-7/17': 'MANUTENCAO E REPARACAO DE MAQUINAS E EQUIPAMENTOS DE TERRAPLENAGEM, PAVIMENTACAO E CONSTRUCAO, EXCETO TRATORES',
+                       '3314-7/18': 'MANUTENCAO E REPARACAO DE MAQUINAS PARA A INDUSTRIA METALURGICA, EXCETO MAQUINAS-FERRAMENTA',
+                       '3314-7/19': 'MANUTENCAO E REPARACAO DE MAQUINAS E EQUIPAMENTOS PARA AS INDUSTRIAS DE ALIMENTOS, BEBIDAS E FUMO',
+                       '3314-7/20': 'MANUTENCAO E REPARACAO DE MAQUINAS E EQUIPAMENTOS PARA A INDUSTRIA TEXTIL, DO VESTUARIO, DO COURO E CALCADOS',
+                       '3314-7/21': 'MANUTENCAO E REPARACAO DE MAQUINAS E APARELHOS PARA A INDUSTRIA DE CELULOSE, PAPEL E PAPELAO E ARTEFATOS',
+                       '3314-7/22': 'MANUTENCAO E REPARACAO DE MAQUINAS E APARELHOS PARA A INDUSTRIA DO PLASTICO',
+                       '3314-7/99': 'MANUTENCAO E REPARACAO DE OUTRAS MAQUINAS E EQUIPAMENTOS PARA USOS INDUSTRIAIS NAO ESPECIFICADOS ANTERIORMENTE',
+                       '3315-5/00': 'MANUTENCAO E REPARACAO DE VEICULOS FERROVIARIOS',
+                       '3316-3/01': 'MANUTENCAO E REPARACAO DE AERONAVES, EXCETO A MANUTENCAO NA PISTA',
+                       '3316-3/02': 'MANUTENCAO DE AERONAVES NA PISTA',
+                       '3317-1/01': 'MANUTENCAO E REPARACAO DE EMBARCACOES E ESTRUTURAS FLUTUANTES',
+                       '3317-1/02': 'MANUTENCAO E REPARACAO DE EMBARCACOES PARA ESPORTE E LAZER',
+                       '3319-8/00': 'MANUTENCAO E REPARACAO DE EQUIPAMENTOS E PRODUTOS NAO ESPECIFICADOS ANTERIORMENTE',
+                       '3321-0/00': 'INSTALACAO DE MAQUINAS E EQUIPAMENTOS INDUSTRIAIS',
+                       '3329-5/01': 'SERVICOS DE MONTAGEM DE MOVEIS DE QUALQUER MATERIAL',
+                       '3329-5/99': 'INSTALACAO DE OUTROS EQUIPAMENTOS NAO ESPECIFICADOS ANTERIORMENTE',
+                       '3511-5/01': 'GERACAO DE ENERGIA ELETRICA',
+                       '3511-5/02': 'ATIVIDADES DE COORDENACAO E CONTROLE DA OPERACAO DA GERACAO E TRANSMISSAO DE ENERGIA ELETRICA',
+                       '3512-3/00': 'TRANSMISSAO DE ENERGIA ELETRICA',
+                       '3513-1/00': 'COMERCIO ATACADISTA DE ENERGIA ELETRICA',
+                       '3514-0/00': 'DISTRIBUICAO DE ENERGIA ELETRICA',
+                       '3520-4/01': 'PRODUCAO DE GAS; PROCESSAMENTO DE GAS NATURAL',
+                       '3520-4/02': 'DISTRIBUICAO DE COMBUSTIVEIS GASOSOS POR REDES URBANAS',
+                       '3530-1/00': 'PRODUCAO E DISTRIBUICAO DE VAPOR, AGUA QUENTE E AR CONDICIONADO',
+                       '3600-6/01': 'CAPTACAO, TRATAMENTO E DISTRIBUICAO DE AGUA',
+                       '3600-6/02': 'DISTRIBUICAO DE AGUA POR CAMINHOES',
+                       '3701-1/00': 'GESTAO DE REDES DE ESGOTO',
+                       '3702-9/00': 'ATIVIDADES RELACIONADAS A ESGOTO, EXCETO A GESTAO DE REDES',
+                       '3811-4/00': 'COLETA DE RESIDUOS NAO-PERIGOSOS',
+                       '3812-2/00': 'COLETA DE RESIDUOS PERIGOSOS',
+                       '3821-1/00': 'TRATAMENTO E DISPOSICAO DE RESIDUOS NAO-PERIGOSOS',
+                       '3822-0/00': 'TRATAMENTO E DISPOSICAO DE RESIDUOS PERIGOSOS',
+                       '3831-9/01': 'RECUPERACAO DE SUCATAS DE ALUMINIO',
+                       '3831-9/99': 'RECUPERACAO DE MATERIAIS METALICOS, EXCETO ALUMINIO',
+                       '3832-7/00': 'RECUPERACAO DE MATERIAIS PLASTICOS',
+                       '3839-4/01': 'USINAS DE COMPOSTAGEM',
+                       '3839-4/99': 'RECUPERACAO DE MATERIAIS NAO ESPECIFICADOS ANTERIORMENTE',
+                       '3900-5/00': 'DESCONTAMINACAO E OUTROS SERVICOS DE GESTAO DE RESIDUOS',
+                       '4110-7/00': 'INCORPORACAO DE EMPREENDIMENTOS IMOBILIARIOS',
+                       '4120-4/00': 'CONSTRUCAO DE EDIFICIOS',
+                       '4211-1/01': 'CONSTRUCAO DE RODOVIAS E FERROVIAS',
+                       '4211-1/02': 'PINTURA PARA SINALIZACAO EM PISTAS RODOVIARIAS E AEROPORTOS',
+                       '4212-0/00': 'CONSTRUCAO DE OBRAS-DE-ARTE ESPECIAIS',
+                       '4213-8/00': 'OBRAS DE URBANIZACAO - RUAS, PRACAS E CALCADAS',
+                       '4221-9/01': 'CONSTRUCAO DE BARRAGENS E REPRESAS PARA GERACAO DE ENERGIA ELETRICA',
+                       '4221-9/02': 'CONSTRUCAO DE ESTACOES E REDES DE DISTRIBUICAO DE ENERGIA ELETRICA',
+                       '4221-9/03': 'MANUTENCAO DE REDES DE DISTRIBUICAO DE ENERGIA ELETRICA',
+                       '4221-9/04': 'CONSTRUCAO DE ESTACOES E REDES DE TELECOMUNICACOES',
+                       '4221-9/05': 'MANUTENCAO DE ESTACOES E REDES DE TELECOMUNICACOES',
+                       '4222-7/01': 'CONSTRUCAO DE REDES DE ABASTECIMENTO DE AGUA, COLETA DE ESGOTO E CONSTRUCOES CORRELATAS, EXCETO OBRAS DE IRRIGACAO',
+                       '4222-7/02': 'OBRAS DE IRRIGACAO',
+                       '4223-5/00': 'CONSTRUCAO DE REDES DE TRANSPORTES POR DUTOS, EXCETO PARA AGUA E ESGOTO',
+                       '4291-0/00': 'OBRAS PORTUARIAS, MARITIMAS E FLUVIAIS',
+                       '4292-8/01': 'MONTAGEM DE ESTRUTURAS METALICAS',
+                       '4292-8/02': 'OBRAS DE MONTAGEM INDUSTRIAL',
+                       '4299-5/01': 'CONSTRUCAO DE INSTALACOES ESPORTIVAS E RECREATIVAS',
+                       '4299-5/99': 'OUTRAS OBRAS DE ENGENHARIA CIVIL NAO ESPECIFICADAS ANTERIORMENTE',
+                       '4311-8/01': 'DEMOLICAO DE EDIFICIOS E OUTRAS ESTRUTURAS',
+                       '4311-8/02': 'PREPARACAO DE CANTEIRO E LIMPEZA DE TERRENO',
+                       '4312-6/00': 'PERFURACOES E SONDAGENS',
+                       '4313-4/00': 'OBRAS DE TERRAPLENAGEM',
+                       '4319-3/00': 'SERVICOS DE PREPARACAO DO TERRENO NAO ESPECIFICADOS ANTERIORMENTE',
+                       '4321-5/00': 'INSTALACAO E MANUTENCAO ELETRICA',
+                       '4322-3/01': 'INSTALACOES HIDRAULICAS, SANITARIAS E DE GAS',
+                       '4322-3/02': 'INSTALACAO E MANUTENCAO DE SISTEMAS CENTRAIS DE AR CONDICIONADO, DE VENTILACAO E REFRIGERACAO',
+                       '4322-3/03': 'INSTALACOES DE SISTEMA DE PREVENCAO CONTRA INCENDIO',
+                       '4329-1/01': 'INSTALACAO DE PAINEIS PUBLICITARIOS',
+                       '4329-1/02': 'INSTALACAO DE EQUIPAMENTOS PARA ORIENTACAO A NAVEGACAO MARITIMA, FLUVIAL E LACUSTRE',
+                       '4329-1/03': 'INSTALACAO, MANUTENCAO E REPARACAO DE ELEVADORES, ESCADAS E ESTEIRAS ROLANTES',
+                       '4329-1/04': 'MONTAGEM E INSTALACAO DE SISTEMAS E EQUIPAMENTOS DE ILUMINACAO E SINALIZACAO EM VIAS PUBLICAS, PORTOS E AEROPORTOS',
+                       '4329-1/05': 'TRATAMENTOS TERMICOS, ACUSTICOS OU DE VIBRACAO',
+                       '4329-1/99': 'OUTRAS OBRAS DE INSTALACOES EM CONSTRUCOES NAO ESPECIFICADAS ANTERIORMENTE',
+                       '4330-4/01': 'IMPERMEABILIZACAO EM OBRAS DE ENGENHARIA CIVIL',
+                       '4330-4/02': 'INSTALACAO DE PORTAS, JANELAS, TETOS, DIVISORIAS E ARMARIOS EMBUTIDOS DE QUALQUER MATERIAL',
+                       '4330-4/03': 'OBRAS DE ACABAMENTO EM GESSO E ESTUQUE',
+                       '4330-4/04': 'SERVICOS DE PINTURA DE EDIFICIOS EM GERAL',
+                       '4330-4/05': 'APLICACAO DE REVESTIMENTOS E DE RESINAS EM INTERIORES E EXTERIORES',
+                       '4330-4/99': 'OUTRAS OBRAS DE ACABAMENTO DA CONSTRUCAO',
+                       '4391-6/00': 'OBRAS DE FUNDACOES',
+                       '4399-1/01': 'ADMINISTRACAO DE OBRAS',
+                       '4399-1/02': 'MONTAGEM E DESMONTAGEM DE ANDAIMES E OUTRAS ESTRUTURAS TEMPORARIAS',
+                       '4399-1/03': 'OBRAS DE ALVENARIA',
+                       '4399-1/04': 'SERVICOS DE OPERACAO E FORNECIMENTO DE EQUIPAMENTOS PARA TRANSPORTE E ELEVACAO DE CARGAS E PESSOAS PARA USO EM OBRAS',
+                       '4399-1/05': 'PERFURACAO E CONSTRUCAO DE POCOS DE AGUA',
+                       '4399-1/99': 'SERVICOS ESPECIALIZADOS PARA CONSTRUCAO NAO ESPECIFICADOS ANTERIORMENTE',
+                       '4511-1/01': 'COMERCIO A VAREJO DE AUTOMOVEIS, CAMIONETAS E UTILITARIOS NOVOS',
+                       '4511-1/02': 'COMERCIO A VAREJO DE AUTOMOVEIS, CAMIONETAS E UTILITARIOS USADOS',
+                       '4511-1/03': 'COMERCIO POR ATACADO DE AUTOMOVEIS, CAMIONETAS E UTILITARIOS NOVOS E USADOS',
+                       '4511-1/04': 'COMERCIO POR ATACADO DE CAMINHOES NOVOS E USADOS',
+                       '4511-1/05': 'COMERCIO POR ATACADO DE REBOQUES E SEMI-REBOQUES NOVOS E USADOS',
+                       '4511-1/06': 'COMERCIO POR ATACADO DE ONIBUS E MICROONIBUS NOVOS E USADOS',
+                       '4512-9/01': 'REPRESENTANTES COMERCIAIS E AGENTES DO COMERCIO DE VEICULOS AUTOMOTORES',
+                       '4512-9/02': 'COMERCIO SOB CONSIGNACAO DE VEICULOS AUTOMOTORES',
+                       '4520-0/01': 'SERVICOS DE MANUTENCAO E REPARACAO MECANICA DE VEICULOS AUTOMOTORES',
+                       '4520-0/02': 'SERVICOS DE LANTERNAGEM OU FUNILARIA E PINTURA DE VEICULOS AUTOMOTORES',
+                       '4520-0/03': 'SERVICOS DE MANUTENCAO E REPARACAO ELETRICA DE VEICULOS AUTOMOTORES',
+                       '4520-0/04': 'SERVICOS DE ALINHAMENTO E BALANCEAMENTO DE VEICULOS AUTOMOTORES',
+                       '4520-0/05': 'SERVICOS DE LAVAGEM, LUBRIFICACAO E POLIMENTO DE VEICULOS AUTOMOTORES',
+                       '4520-0/06': 'SERVICOS DE BORRACHARIA PARA VEICULOS AUTOMOTORES',
+                       '4520-0/07': 'SERVICOS DE INSTALACAO, MANUTENCAO E REPARACAO DE ACESSORIOS PARA VEICULOS AUTOMOTORES',
+                       '4520-0/08': 'SERVICOS DE CAPOTARIA',
+                       '4530-7/01': 'COMERCIO POR ATACADO DE PECAS E ACESSORIOS NOVOS PARA VEICULOS AUTOMOTORES',
+                       '4530-7/02': 'COMERCIO POR ATACADO DE PNEUMATICOS E CAMARAS-DE-AR',
+                       '4530-7/03': 'COMERCIO A VAREJO DE PECAS E ACESSORIOS NOVOS PARA VEICULOS AUTOMOTORES',
+                       '4530-7/04': 'COMERCIO A VAREJO DE PECAS E ACESSORIOS USADOS PARA VEICULOS AUTOMOTORES',
+                       '4530-7/05': 'COMERCIO A VAREJO DE PNEUMATICOS E CAMARAS-DE-AR',
+                       '4530-7/06': 'REPRESENTANTES COMERCIAIS E AGENTES DO COMERCIO DE PECAS E ACESSORIOS NOVOS E USADOS PARA VEICULOS AUTOMOTORES',
+                       '4541-2/01': 'COMERCIO POR ATACADO DE MOTOCICLETAS E MOTONETAS',
+                       '4541-2/02': 'COMERCIO POR ATACADO DE PECAS E ACESSORIOS PARA MOTOCICLETAS E MOTONETAS',
+                       '4541-2/03': 'COMERCIO A VAREJO DE MOTOCICLETAS E MOTONETAS NOVAS',
+                       '4541-2/04': 'COMERCIO A VAREJO DE MOTOCICLETAS E MOTONETAS USADAS',
+                       '4541-2/05': 'COMERCIO A VAREJO DE PECAS E ACESSORIOS PARA MOTOCICLETAS E MOTONETAS',
+                       '4542-1/01': 'REPRESENTANTES COMERCIAIS E AGENTES DO COMERCIO DE MOTOCICLETAS E MOTONETAS, PECAS E ACESSORIOS',
+                       '4542-1/02': 'COMERCIO SOB CONSIGNACAO DE MOTOCICLETAS E MOTONETAS',
+                       '4543-9/00': 'MANUTENCAO E REPARACAO DE MOTOCICLETAS E MOTONETAS',
+                       '4611-7/00': 'REPRESENTANTES COMERCIAIS E AGENTES DO COMERCIO DE MATERIAS-PRIMAS AGRICOLAS E ANIMAIS VIVOS',
+                       '4612-5/00': 'REPRESENTANTES COMERCIAIS E AGENTES DO COMERCIO DE COMBUSTIVEIS, MINERAIS, PRODUTOS SIDERURGICOS E QUIMICOS',
+                       '4613-3/00': 'REPRESENTANTES COMERCIAIS E AGENTES DO COMERCIO DE MADEIRA, MATERIAL DE CONSTRUCAO E FERRAGENS',
+                       '4614-1/00': 'REPRESENTANTES COMERCIAIS E AGENTES DO COMERCIO DE MAQUINAS, EQUIPAMENTOS, EMBARCACOES E AERONAVES',
+                       '4615-0/00': 'REPRESENTANTES COMERCIAIS E AGENTES DO COMERCIO DE ELETRODOMESTICOS, MOVEIS E ARTIGOS DE USO DOMESTICO',
+                       '4616-8/00': 'REPRESENTANTES COMERCIAIS E AGENTES DO COMERCIO DE TEXTEIS, VESTUARIO, CALCADOS E ARTIGOS DE VIAGEM',
+                       '4617-6/00': 'REPRESENTANTES COMERCIAIS E AGENTES DO COMERCIO DE PRODUTOS ALIMENTICIOS, BEBIDAS E FUMO',
+                       '4618-4/01': 'REPRESENTANTES COMERCIAIS E AGENTES DO COMERCIO DE MEDICAMENTOS, COSMETICOS E PRODUTOS DE PERFUMARIA',
+                       '4618-4/02': 'REPRESENTANTES COMERCIAIS E AGENTES DO COMERCIO DE INSTRUMENTOS E MATERIAIS ODONTO-MEDICO-HOSPITALARES',
+                       '4618-4/03': 'REPRESENTANTES COMERCIAIS E AGENTES DO COMERCIO DE JORNAIS, REVISTAS E OUTRAS PUBLICACOES',
+                       '4618-4/99': 'OUTROS REPRESENTANTES COMERCIAIS E AGENTES DO COMERCIO ESPECIALIZADO EM PRODUTOS NAO ESPECIFICADOS ANTERIORMENTE',
+                       '4619-2/00': 'REPRESENTANTES COMERCIAIS E AGENTES DO COMERCIO DE MERCADORIAS EM GERAL NAO ESPECIALIZADO',
+                       '4621-4/00': 'COMERCIO ATACADISTA DE CAFE EM GRAO',
+                       '4622-2/00': 'COMERCIO ATACADISTA DE SOJA',
+                       '4623-1/01': 'COMERCIO ATACADISTA DE ANIMAIS VIVOS',
+                       '4623-1/02': 'COMERCIO ATACADISTA DE COUROS, LAS, PELES E OUTROS SUBPRODUTOS NAO-COMESTIVEIS DE ORIGEM ANIMAL',
+                       '4623-1/03': 'COMERCIO ATACADISTA DE ALGODAO',
+                       '4623-1/04': 'COMERCIO ATACADISTA DE FUMO EM FOLHA NAO BENEFICIADO',
+                       '4623-1/05': 'COMERCIO ATACADISTA DE CACAU',
+                       '4623-1/06': 'COMERCIO ATACADISTA DE SEMENTES, FLORES, PLANTAS E GRAMAS',
+                       '4623-1/07': 'COMERCIO ATACADISTA DE SISAL',
+                       '4623-1/08': 'COMERCIO ATACADISTA DE MATERIAS-PRIMAS AGRICOLAS COM ATIVIDADE DE FRACIONAMENTO E ACONDICIONAMENTO ASSOCIADA',
+                       '4623-1/09': 'COMERCIO ATACADISTA DE ALIMENTOS PARA ANIMAIS',
+                       '4623-1/99': 'COMERCIO ATACADISTA DE MATERIAS-PRIMAS AGRICOLAS NAO ESPECIFICADAS ANTERIORMENTE',
+                       '4631-1/00': 'COMERCIO ATACADISTA DE LEITE E LATICINIOS',
+                       '4632-0/01': 'COMERCIO ATACADISTA DE CEREAIS E LEGUMINOSAS BENEFICIADOS',
+                       '4632-0/02': 'COMERCIO ATACADISTA DE FARINHAS, AMIDOS E FECULAS',
+                       '4632-0/03': 'COMERCIO ATACADISTA DE CEREAIS E LEGUMINOSAS BENEFICIADOS, FARINHAS, AMIDOS E FECULAS, COM ATIVIDADE DE FRACIONAMENTO E ACONDICIONAMENTO ASSOCIADA',
+                       '4633-8/01': 'COMERCIO ATACADISTA DE FRUTAS, VERDURAS, RAIZES, TUBERCULOS, HORTALICAS E LEGUMES FRESCOS',
+                       '4633-8/02': 'COMERCIO ATACADISTA DE AVES VIVAS E OVOS',
+                       '4633-8/03': 'COMERCIO ATACADISTA DE COELHOS E OUTROS PEQUENOS ANIMAIS VIVOS PARA ALIMENTACAO',
+                       '4634-6/01': 'COMERCIO ATACADISTA DE CARNES BOVINAS E SUINAS E DERIVADOS',
+                       '4634-6/02': 'COMERCIO ATACADISTA DE AVES ABATIDAS E DERIVADOS',
+                       '4634-6/03': 'COMERCIO ATACADISTA DE PESCADOS E FRUTOS DO MAR',
+                       '4634-6/99': 'COMERCIO ATACADISTA DE CARNES E DERIVADOS DE OUTROS ANIMAIS',
+                       '4635-4/01': 'COMERCIO ATACADISTA DE AGUA MINERAL',
+                       '4635-4/02': 'COMERCIO ATACADISTA DE CERVEJA, CHOPE E REFRIGERANTE',
+                       '4635-4/03': 'COMERCIO ATACADISTA DE BEBIDAS COM ATIVIDADE DE FRACIONAMENTO E ACONDICIONAMENTO ASSOCIADA',
+                       '4635-4/99': 'COMERCIO ATACADISTA DE BEBIDAS NAO ESPECIFICADAS ANTERIORMENTE',
+                       '4636-2/01': 'COMERCIO ATACADISTA DE FUMO BENEFICIADO',
+                       '4636-2/02': 'COMERCIO ATACADISTA DE CIGARROS, CIGARRILHAS E CHARUTOS',
+                       '4637-1/01': 'COMERCIO ATACADISTA DE CAFE TORRADO, MOIDO E SOLUVEL',
+                       '4637-1/02': 'COMERCIO ATACADISTA DE ACUCAR',
+                       '4637-1/03': 'COMERCIO ATACADISTA DE OLEOS E GORDURAS',
+                       '4637-1/04': 'COMERCIO ATACADISTA DE PAES, BOLOS, BISCOITOS E SIMILARES',
+                       '4637-1/05': 'COMERCIO ATACADISTA DE MASSAS ALIMENTICIAS',
+                       '4637-1/06': 'COMERCIO ATACADISTA DE SORVETES',
+                       '4637-1/07': 'COMERCIO ATACADISTA DE CHOCOLATES, CONFEITOS, BALAS, BOMBONS E SEMELHANTES',
+                       '4637-1/99': 'COMERCIO ATACADISTA ESPECIALIZADO EM OUTROS PRODUTOS ALIMENTICIOS NAO ESPECIFICADOS ANTERIORMENTE',
+                       '4639-7/01': 'COMERCIO ATACADISTA DE PRODUTOS ALIMENTICIOS EM GERAL',
+                       '4639-7/02': 'COMERCIO ATACADISTA DE PRODUTOS ALIMENTICIOS EM GERAL, COM ATIVIDADE DE FRACIONAMENTO E ACONDICIONAMENTO ASSOCIADA',
+                       '4641-9/01': 'COMERCIO ATACADISTA DE TECIDOS',
+                       '4641-9/02': 'COMERCIO ATACADISTA DE ARTIGOS DE CAMA, MESA E BANHO',
+                       '4641-9/03': 'COMERCIO ATACADISTA DE ARTIGOS DE ARMARINHO',
+                       '4642-7/01': 'COMERCIO ATACADISTA DE ARTIGOS DO VESTUARIO E ACESSORIOS, EXCETO PROFISSIONAIS E DE SEGURANCA',
+                       '4642-7/02': 'COMERCIO ATACADISTA DE ROUPAS E ACESSORIOS PARA USO PROFISSIONAL E DE SEGURANCA DO TRABALHO',
+                       '4643-5/01': 'COMERCIO ATACADISTA DE CALCADOS',
+                       '4643-5/02': 'COMERCIO ATACADISTA DE BOLSAS, MALAS E ARTIGOS DE VIAGEM',
+                       '4644-3/01': 'COMERCIO ATACADISTA DE MEDICAMENTOS E DROGAS DE USO HUMANO',
+                       '4644-3/02': 'COMERCIO ATACADISTA DE MEDICAMENTOS E DROGAS DE USO VETERINARIO',
+                       '4645-1/01': 'COMERCIO ATACADISTA DE INSTRUMENTOS E MATERIAIS PARA USO MEDICO, CIRURGICO, HOSPITALAR E DE LABORATORIOS',
+                       '4645-1/02': 'COMERCIO ATACADISTA DE PROTESES E ARTIGOS DE ORTOPEDIA',
+                       '4645-1/03': 'COMERCIO ATACADISTA DE PRODUTOS ODONTOLOGICOS',
+                       '4646-0/01': 'COMERCIO ATACADISTA DE COSMETICOS E PRODUTOS DE PERFUMARIA',
+                       '4646-0/02': 'COMERCIO ATACADISTA DE PRODUTOS DE HIGIENE PESSOAL',
+                       '4647-8/01': 'COMERCIO ATACADISTA DE ARTIGOS DE ESCRITORIO E DE PAPELARIA',
+                       '4647-8/02': 'COMERCIO ATACADISTA DE LIVROS, JORNAIS E OUTRAS PUBLICACOES',
+                       '4649-4/01': 'COMERCIO ATACADISTA DE EQUIPAMENTOS ELETRICOS DE USO PESSOAL E DOMESTICO',
+                       '4649-4/02': 'COMERCIO ATACADISTA DE APARELHOS ELETRONICOS DE USO PESSOAL E DOMESTICO',
+                       '4649-4/03': 'COMERCIO ATACADISTA DE BICICLETAS, TRICICLOS E OUTROS VEICULOS RECREATIVOS',
+                       '4649-4/04': 'COMERCIO ATACADISTA DE MOVEIS E ARTIGOS DE COLCHOARIA',
+                       '4649-4/05': 'COMERCIO ATACADISTA DE ARTIGOS DE TAPECARIA; PERSIANAS E CORTINAS',
+                       '4649-4/06': 'COMERCIO ATACADISTA DE LUSTRES, LUMINARIAS E ABAJURES',
+                       '4649-4/07': 'COMERCIO ATACADISTA DE FILMES, CDS, DVDS, FITAS E DISCOS',
+                       '4649-4/08': 'COMERCIO ATACADISTA DE PRODUTOS DE HIGIENE, LIMPEZA E CONSERVACAO DOMICILIAR',
+                       '4649-4/09': 'COMERCIO ATACADISTA DE PRODUTOS DE HIGIENE, LIMPEZA E CONSERVACAO DOMICILIAR, COM ATIVIDADE DE FRACIONAMENTO E ACONDICIONAMENTO ASSOCIADA',
+                       '4649-4/10': 'COMERCIO ATACADISTA DE JOIAS, RELOGIOS E BIJUTERIAS, INCLUSIVE PEDRAS PRECIOSAS E SEMIPRECIOSAS LAPIDADAS',
+                       '4649-4/99': 'COMERCIO ATACADISTA DE OUTROS EQUIPAMENTOS E ARTIGOS DE USO PESSOAL E DOMESTICO NAO ESPECIFICADOS ANTERIORMENTE',
+                       '4651-6/01': 'COMERCIO ATACADISTA DE EQUIPAMENTOS DE INFORMATICA',
+                       '4651-6/02': 'COMERCIO ATACADISTA DE SUPRIMENTOS PARA INFORMATICA',
+                       '4652-4/00': 'COMERCIO ATACADISTA DE COMPONENTES ELETRONICOS E EQUIPAMENTOS DE TELEFONIA E COMUNICACAO',
+                       '4661-3/00': 'COMERCIO ATACADISTA DE MAQUINAS, APARELHOS E EQUIPAMENTOS PARA USO AGROPECUARIO; PARTES E PECAS',
+                       '4662-1/00': 'COMERCIO ATACADISTA DE MAQUINAS, EQUIPAMENTOS PARA TERRAPLENAGEM, MINERACAO E CONSTRUCAO; PARTES E PECAS',
+                       '4663-0/00': 'COMERCIO ATACADISTA DE MAQUINAS E EQUIPAMENTOS PARA USO INDUSTRIAL; PARTES E PECAS',
+                       '4664-8/00': 'COMERCIO ATACADISTA DE MAQUINAS, APARELHOS E EQUIPAMENTOS PARA USO ODONTO-MEDICO-HOSPITALAR; PARTES E PECAS',
+                       '4665-6/00': 'COMERCIO ATACADISTA DE MAQUINAS E EQUIPAMENTOS PARA USO COMERCIAL; PARTES E PECAS',
+                       '4669-9/01': 'COMERCIO ATACADISTA DE BOMBAS E COMPRESSORES; PARTES E PECAS',
+                       '4669-9/99': 'COMERCIO ATACADISTA DE OUTRAS MAQUINAS E EQUIPAMENTOS NAO ESPECIFICADOS ANTERIORMENTE; PARTES E PECAS',
+                       '4671-1/00': 'COMERCIO ATACADISTA DE MADEIRA E PRODUTOS DERIVADOS',
+                       '4672-9/00': 'COMERCIO ATACADISTA DE FERRAGENS E FERRAMENTAS',
+                       '4673-7/00': 'COMERCIO ATACADISTA DE MATERIAL ELETRICO',
+                       '4674-5/00': 'COMERCIO ATACADISTA DE CIMENTO',
+                       '4679-6/01': 'COMERCIO ATACADISTA DE TINTAS, VERNIZES E SIMILARES',
+                       '4679-6/02': 'COMERCIO ATACADISTA DE MARMORES E GRANITOS',
+                       '4679-6/03': 'COMERCIO ATACADISTA DE VIDROS, ESPELHOS E VITRAIS',
+                       '4679-6/04': 'COMERCIO ATACADISTA ESPECIALIZADO DE MATERIAIS DE CONSTRUCAO NAO ESPECIFICADOS ANTERIORMENTE',
+                       '4679-6/99': 'COMERCIO ATACADISTA DE MATERIAIS DE CONSTRUCAO EM GERAL',
+                       '4681-8/01': 'COMERCIO ATACADISTA DE ALCOOL CARBURANTE, BIODIESEL, GASOLINA E DEMAIS DERIVADOS DE PETROLEO, EXCETO LUBRIFICANTES, NAO REALIZADO POR TRANSPORTADOR RETALHISTA (TRR,',
+                       '4681-8/02': 'COMERCIO ATACADISTA DE COMBUSTIVEIS REALIZADO POR TRANSPORTADOR RETALHISTA (TRR)',
+                       '4681-8/03': 'COMERCIO ATACADISTA DE COMBUSTIVEIS DE ORIGEM VEGETAL, EXCETO ALCOOL CARBURANTE',
+                       '4681-8/04': 'COMERCIO ATACADISTA DE COMBUSTIVEIS DE ORIGEM MINERAL EM BRUTO',
+                       '4681-8/05': 'COMERCIO ATACADISTA DE LUBRIFICANTES',
+                       '4682-6/00': 'COMERCIO ATACADISTA DE GAS LIQUEFEITO DE PETROLEO (GLP)',
+                       '4683-4/00': 'COMERCIO ATACADISTA DE DEFENSIVOS AGRICOLAS, ADUBOS, FERTILIZANTES E CORRETIVOS DO SOLO',
+                       '4684-2/01': 'COMERCIO ATACADISTA DE RESINAS E ELASTOMEROS',
+                       '4684-2/02': 'COMERCIO ATACADISTA DE SOLVENTES',
+                       '4684-2/99': 'COMERCIO ATACADISTA DE OUTROS PRODUTOS QUIMICOS E PETROQUIMICOS NAO ESPECIFICADOS ANTERIORMENTE',
+                       '4685-1/00': 'COMERCIO ATACADISTA DE PRODUTOS SIDERURGICOS E METALURGICOS, EXCETO PARA CONSTRUCAO',
+                       '4686-9/01': 'COMERCIO ATACADISTA DE PAPEL E PAPELAO EM BRUTO',
+                       '4686-9/02': 'COMERCIO ATACADISTA DE EMBALAGENS',
+                       '4687-7/01': 'COMERCIO ATACADISTA DE RESIDUOS DE PAPEL E PAPELAO',
+                       '4687-7/02': 'COMERCIO ATACADISTA DE RESIDUOS E SUCATAS NAO-METALICOS, EXCETO DE PAPEL E PAPELAO',
+                       '4687-7/03': 'COMERCIO ATACADISTA DE RESIDUOS E SUCATAS METALICOS',
+                       '4689-3/01': 'COMERCIO ATACADISTA DE PRODUTOS DA EXTRACAO MINERAL, EXCETO COMBUSTIVEIS',
+                       '4689-3/02': 'COMERCIO ATACADISTA DE FIOS E FIBRAS BENEFICIADOS',
+                       '4689-3/99': 'COMERCIO ATACADISTA ESPECIALIZADO EM OUTROS PRODUTOS INTERMEDIARIOS NAO ESPECIFICADOS ANTERIORMENTE',
+                       '4691-5/00': 'COMERCIO ATACADISTA DE MERCADORIAS EM GERAL, COM PREDOMINANCIA DE PRODUTOS ALIMENTICIOS',
+                       '4692-3/00': 'COMERCIO ATACADISTA DE MERCADORIAS EM GERAL, COM PREDOMINANCIA DE INSUMOS AGROPECUARIOS',
+                       '4693-1/00': 'COMERCIO ATACADISTA DE MERCADORIAS EM GERAL, SEM PREDOMINANCIA DE ALIMENTOS OU DE INSUMOS AGROPECUARIOS',
+                       '4711-3/01': 'COMERCIO VAREJISTA DE MERCADORIAS EM GERAL, COM PREDOMINANCIA DE PRODUTOS ALIMENTICIOS - HIPERMERCADOS',
+                       '4711-3/02': 'COMERCIO VAREJISTA DE MERCADORIAS EM GERAL, COM PREDOMINANCIA DE PRODUTOS ALIMENTICIOS - SUPERMERCADOS',
+                       '4712-1/00': 'COMERCIO VAREJISTA DE MERCADORIAS EM GERAL, COM PREDOMINANCIA DE PRODUTOS ALIMENTICIOS - MINIMERCADOS, MERCEARIAS E ARMAZENS',
+                       '4713-0/01': 'LOJAS DE DEPARTAMENTOS OU MAGAZINES',
+                       '4713-0/02': 'LOJAS DE VARIEDADES, EXCETO LOJAS DE DEPARTAMENTOS OU MAGAZINES',
+                       '4713-0/03': 'LOJAS DUTY FREE DE AEROPORTOS INTERNACIONAIS',
+                       '4721-1/02': 'PADARIA E CONFEITARIA COM PREDOMINANCIA DE REVENDA',
+                       '4721-1/03': 'COMERCIO VAREJISTA DE LATICINIOS E FRIOS',
+                       '4721-1/04': 'COMERCIO VAREJISTA DE DOCES, BALAS, BOMBONS E SEMELHANTES',
+                       '4722-9/01': 'COMERCIO VAREJISTA DE CARNES - ACOUGUES',
+                       '4722-9/02': 'PEIXARIA',
+                       '4723-7/00': 'COMERCIO VAREJISTA DE BEBIDAS',
+                       '4724-5/00': 'COMERCIO VAREJISTA DE HORTIFRUTIGRANJEIROS',
+                       '4729-6/01': 'TABACARIA',
+                       '4729-6/02': 'COMERCIO VAREJISTA DE MERCADORIAS EM LOJAS DE CONVENIENCIA',
+                       '4729-6/99': 'COMERCIO VAREJISTA DE PRODUTOS ALIMENTICIOS EM GERAL OU ESPECIALIZADO EM PRODUTOS ALIMENTICIOS NAO ESPECIFICADOS ANTERIORMENTE',
+                       '4731-8/00': 'COMERCIO VAREJISTA DE COMBUSTIVEIS PARA VEICULOS AUTOMOTORES',
+                       '4732-6/00': 'COMERCIO VAREJISTA DE LUBRIFICANTES',
+                       '4741-5/00': 'COMERCIO VAREJISTA DE TINTAS E MATERIAIS PARA PINTURA',
+                       '4742-3/00': 'COMERCIO VAREJISTA DE MATERIAL ELETRICO',
+                       '4743-1/00': 'COMERCIO VAREJISTA DE VIDROS',
+                       '4744-0/01': 'COMERCIO VAREJISTA DE FERRAGENS E FERRAMENTAS',
+                       '4744-0/02': 'COMERCIO VAREJISTA DE MADEIRA E ARTEFATOS',
+                       '4744-0/03': 'COMERCIO VAREJISTA DE MATERIAIS HIDRAULICOS',
+                       '4744-0/04': 'COMERCIO VAREJISTA DE CAL, AREIA, PEDRA BRITADA, TIJOLOS E TELHAS',
+                       '4744-0/05': 'COMERCIO VAREJISTA DE MATERIAIS DE CONSTRUCAO NAO ESPECIFICADOS ANTERIORMENTE',
+                       '4744-0/06': 'COMERCIO VAREJISTA DE PEDRAS PARA REVESTIMENTO',
+                       '4744-0/99': 'COMERCIO VAREJISTA DE MATERIAIS DE CONSTRUCAO EM GERAL',
+                       '4751-2/00': 'COMERCIO VAREJISTA ESPECIALIZADO DE EQUIPAMENTOS E SUPRIMENTOS DE INFORMATICA',
+                       '4751-2/01': 'COMERCIO VAREJISTA ESPECIALIZADO DE EQUIPAMENTOS E SUPRIMENTOS DE INFORMATICA',
+                       '4751-2/02': 'RECARGA DE CARTUCHOS PARA EQUIPAMENTOS DE INFORMATICA',
+                       '4752-1/00': 'COMERCIO VAREJISTA ESPECIALIZADO DE EQUIPAMENTOS DE TELEFONIA E COMUNICACAO',
+                       '4753-9/00': 'COMERCIO VAREJISTA ESPECIALIZADO DE ELETRODOMESTICOS E EQUIPAMENTOS DE AUDIO E VIDEO',
+                       '4754-7/01': 'COMERCIO VAREJISTA DE MOVEIS',
+                       '4754-7/02': 'COMERCIO VAREJISTA DE ARTIGOS DE COLCHOARIA',
+                       '4754-7/03': 'COMERCIO VAREJISTA DE ARTIGOS DE ILUMINACAO',
+                       '4755-5/01': 'COMERCIO VAREJISTA DE TECIDOS',
+                       '4755-5/02': 'COMERCIO VAREJISTA DE ARTIGOS DE ARMARINHO',
+                       '4755-5/03': 'COMERCIO VAREJISTA DE ARTIGOS DE CAMA, MESA E BANHO',
+                       '4756-3/00': 'COMERCIO VAREJISTA ESPECIALIZADO DE INSTRUMENTOS MUSICAIS E ACESSORIOS',
+                       '4757-1/00': 'COMERCIO VAREJISTA ESPECIALIZADO DE PECAS E ACESSORIOS PARA APARELHOS ELETROELETRONICOS PARA USO DOMESTICO, EXCETO INFORMATICA E COMUNICACAO',
+                       '4759-8/01': 'COMERCIO VAREJISTA DE ARTIGOS DE TAPECARIA, CORTINAS E PERSIANAS',
+                       '4759-8/99': 'COMERCIO VAREJISTA DE OUTROS ARTIGOS DE USO DOMESTICO NAO ESPECIFICADOS ANTERIORMENTE',
+                       '4761-0/01': 'COMERCIO VAREJISTA DE LIVROS',
+                       '4761-0/02': 'COMERCIO VAREJISTA DE JORNAIS E REVISTAS',
+                       '4761-0/03': 'COMERCIO VAREJISTA DE ARTIGOS DE PAPELARIA',
+                       '4762-8/00': 'COMERCIO VAREJISTA DE DISCOS, CDS, DVDS E FITAS',
+                       '4763-6/01': 'COMERCIO VAREJISTA DE BRINQUEDOS E ARTIGOS RECREATIVOS',
+                       '4763-6/02': 'COMERCIO VAREJISTA DE ARTIGOS ESPORTIVOS',
+                       '4763-6/03': 'COMERCIO VAREJISTA DE BICICLETAS E TRICICLOS; PECAS E ACESSORIOS',
+                       '4763-6/04': 'COMERCIO VAREJISTA DE ARTIGOS DE CACA, PESCA E CAMPING',
+                       '4763-6/05': 'COMERCIO VAREJISTA DE EMBARCACOES E OUTROS VEICULOS RECREATIVOS; PECAS E ACESSORIOS',
+                       '4771-7/01': 'COMERCIO VAREJISTA DE PRODUTOS FARMACEUTICOS, SEM MANIPULACAO DE FORMULAS',
+                       '4771-7/02': 'COMERCIO VAREJISTA DE PRODUTOS FARMACEUTICOS, COM MANIPULACAO DE FORMULAS',
+                       '4771-7/03': 'COMERCIO VAREJISTA DE PRODUTOS FARMACEUTICOS HOMEOPATICOS',
+                       '4771-7/04': 'COMERCIO VAREJISTA DE MEDICAMENTOS VETERINARIOS',
+                       '4772-5/00': 'COMERCIO VAREJISTA DE COSMETICOS, PRODUTOS DE PERFUMARIA E DE HIGIENE PESSOAL',
+                       '4773-3/00': 'COMERCIO VAREJISTA DE ARTIGOS MEDICOS E ORTOPEDICOS',
+                       '4774-1/00': 'COMERCIO VAREJISTA DE ARTIGOS DE OPTICA',
+                       '4781-4/00': 'COMERCIO VAREJISTA DE ARTIGOS DO VESTUARIO E ACESSORIOS',
+                       '4782-2/01': 'COMERCIO VAREJISTA DE CALCADOS',
+                       '4782-2/02': 'COMERCIO VAREJISTA DE ARTIGOS DE VIAGEM',
+                       '4783-1/01': 'COMERCIO VAREJISTA DE ARTIGOS DE JOALHERIA',
+                       '4783-1/02': 'COMERCIO VAREJISTA DE ARTIGOS DE RELOJOARIA',
+                       '4784-9/00': 'COMERCIO VAREJISTA DE GAS LIQUEFEITO DE PETROLEO (GLP)',
+                       '4785-7/01': 'COMERCIO VAREJISTA DE ANTIGUIDADES',
+                       '4785-7/99': 'COMERCIO VAREJISTA DE OUTROS ARTIGOS USADOS',
+                       '4789-0/01': 'COMERCIO VAREJISTA DE SUVENIRES, BIJUTERIAS E ARTESANATOS',
+                       '4789-0/02': 'COMERCIO VAREJISTA DE PLANTAS E FLORES NATURAIS',
+                       '4789-0/03': 'COMERCIO VAREJISTA DE OBJETOS DE ARTE',
+                       '4789-0/04': 'COMERCIO VAREJISTA DE ANIMAIS VIVOS E DE ARTIGOS E ALIMENTOS PARA ANIMAIS DE ESTIMACAO',
+                       '4789-0/05': 'COMERCIO VAREJISTA DE PRODUTOS SANEANTES DOMISSANITARIOS',
+                       '4789-0/06': 'COMERCIO VAREJISTA DE FOGOS DE ARTIFICIO E ARTIGOS PIROTECNICOS',
+                       '4789-0/07': 'COMERCIO VAREJISTA DE EQUIPAMENTOS PARA ESCRITORIO',
+                       '4789-0/08': 'COMERCIO VAREJISTA DE ARTIGOS FOTOGRAFICOS E PARA FILMAGEM',
+                       '4789-0/09': 'COMERCIO VAREJISTA DE ARMAS E MUNICOES',
+                       '4789-0/99': 'COMERCIO VAREJISTA DE OUTROS PRODUTOS NAO ESPECIFICADOS ANTERIORMENTE',
+                       '4911-6/00': 'TRANSPORTE FERROVIARIO DE CARGA',
+                       '4912-4/01': 'TRANSPORTE FERROVIARIO DE PASSAGEIROS INTERMUNICIPAL E INTERESTADUAL',
+                       '4912-4/02': 'TRANSPORTE FERROVIARIO DE PASSAGEIROS MUNICIPAL E EM REGIAO METROPOLITANA',
+                       '4912-4/03': 'TRANSPORTE METROVIARIO',
+                       '4921-3/01': 'TRANSPORTE RODOVIARIO COLETIVO DE PASSAGEIROS, COM ITINERARIO FIXO, MUNICIPAL',
+                       '4921-3/02': 'TRANSPORTE RODOVIARIO COLETIVO DE PASSAGEIROS, COM ITINERARIO FIXO, INTERMUNICIPAL EM REGIAO METROPOLITANA',
+                       '4922-1/01': 'TRANSPORTE RODOVIARIO COLETIVO DE PASSAGEIROS, COM ITINERARIO FIXO, INTERMUNICIPAL, EXCETO EM REGIAO METROPOLITANA',
+                       '4922-1/02': 'TRANSPORTE RODOVIARIO COLETIVO DE PASSAGEIROS, COM ITINERARIO FIXO, INTERESTADUAL',
+                       '4922-1/03': 'TRANSPORTE RODOVIARIO COLETIVO DE PASSAGEIROS, COM ITINERARIO FIXO, INTERNACIONAL',
+                       '4923-0/01': 'SERVICO DE TAXI',
+                       '4923-0/02': 'SERVICO DE TRANSPORTE DE PASSAGEIROS - LOCACAO DE AUTOMOVEIS COM MOTORISTA',
+                       '4924-8/00': 'TRANSPORTE ESCOLAR',
+                       '4929-9/01': 'TRANSPORTE RODOVIARIO COLETIVO DE PASSAGEIROS, SOB REGIME DE FRETAMENTO, MUNICIPAL',
+                       '4929-9/02': 'TRANSPORTE RODOVIARIO COLETIVO DE PASSAGEIROS, SOB REGIME DE FRETAMENTO, INTERMUNICIPAL, INTERESTADUAL E INTERNACIONAL',
+                       '4929-9/03': 'ORGANIZACAO DE EXCURSOES EM VEICULOS RODOVIARIOS PROPRIOS, MUNICIPAL',
+                       '4929-9/04': 'ORGANIZACAO DE EXCURSOES EM VEICULOS RODOVIARIOS PROPRIOS, INTERMUNICIPAL, INTERESTADUAL E INTERNACIONAL',
+                       '4929-9/99': 'OUTROS TRANSPORTES RODOVIARIOS DE PASSAGEIROS NAO ESPECIFICADOS ANTERIORMENTE',
+                       '4930-2/01': 'TRANSPORTE RODOVIARIO DE CARGA, EXCETO PRODUTOS PERIGOSOS E MUDANCAS, MUNICIPAL',
+                       '4930-2/02': 'TRANSPORTE RODOVIARIO DE CARGA, EXCETO PRODUTOS PERIGOSOS E MUDANCAS, INTERMUNICIPAL, INTERESTADUAL E INTERNACIONAL',
+                       '4930-2/03': 'TRANSPORTE RODOVIARIO DE PRODUTOS PERIGOSOS',
+                       '4930-2/04': 'TRANSPORTE RODOVIARIO DE MUDANCAS',
+                       '4940-0/00': 'TRANSPORTE DUTOVIARIO',
+                       '4950-7/00': 'TRENS TURISTICOS, TELEFERICOS E SIMILARES',
+                       '5011-4/01': 'TRANSPORTE MARITIMO DE CABOTAGEM - CARGA',
+                       '5011-4/02': 'TRANSPORTE MARITIMO DE CABOTAGEM - PASSAGEIROS',
+                       '5012-2/01': 'TRANSPORTE MARITIMO DE LONGO CURSO - CARGA',
+                       '5012-2/02': 'TRANSPORTE MARITIMO DE LONGO CURSO - PASSAGEIROS',
+                       '5021-1/01': 'TRANSPORTE POR NAVEGACAO INTERIOR DE CARGA, MUNICIPAL, EXCETO TRAVESSIA',
+                       '5021-1/02': 'TRANSPORTE POR NAVEGACAO INTERIOR DE CARGA, INTERMUNICIPAL, INTERESTADUAL E INTERNACIONAL, EXCETO TRAVESSIA',
+                       '5022-0/01': 'TRANSPORTE POR NAVEGACAO INTERIOR DE PASSAGEIROS EM LINHAS REGULARES, MUNICIPAL, EXCETO TRAVESSIA',
+                       '5022-0/02': 'TRANSPORTE POR NAVEGACAO INTERIOR DE PASSAGEIROS EM LINHAS REGULARES, INTERMUNICIPAL, INTERESTADUAL E INTERNACIONAL, EXCETO TRAVESSIA',
+                       '5030-1/01': 'NAVEGACAO DE APOIO MARITIMO',
+                       '5030-1/02': 'NAVEGACAO DE APOIO PORTUARIO',
+                       '5030-1/03': 'SERVICO DE REBOCADORES E EMPURRADORES',
+                       '5091-2/01': 'TRANSPORTE POR NAVEGACAO DE TRAVESSIA, MUNICIPAL',
+                       '5091-2/02': 'TRANSPORTE POR NAVEGACAO DE TRAVESSIA INTERMUNICIPAL, INTERESTADUAL E INTERNACIONAL',
+                       '5099-8/01': 'TRANSPORTE AQUAVIARIO PARA PASSEIOS TURISTICOS',
+                       '5099-8/99': 'OUTROS TRANSPORTES AQUAVIARIOS NAO ESPECIFICADOS ANTERIORMENTE',
+                       '5111-1/00': 'TRANSPORTE AEREO DE PASSAGEIROS REGULAR',
+                       '5112-9/01': 'SERVICO DE TAXI AEREO E LOCACAO DE AERONAVES COM TRIPULACAO',
+                       '5112-9/99': 'OUTROS SERVICOS DE TRANSPORTE AEREO DE PASSAGEIROS NAO-REGULAR',
+                       '5120-0/00': 'TRANSPORTE AEREO DE CARGA',
+                       '5130-7/00': 'TRANSPORTE ESPACIAL',
+                       '5211-7/01': 'ARMAZENS GERAIS - EMISSAO DE WARRANT',
+                       '5211-7/02': 'GUARDA-MOVEIS',
+                       '5211-7/99': 'DEPOSITOS DE MERCADORIAS PARA TERCEIROS, EXCETO ARMAZENS GERAIS E GUARDA-MOVEIS',
+                       '5212-5/00': 'CARGA E DESCARGA',
+                       '5221-4/00': 'CONCESSIONARIAS DE RODOVIAS, PONTES, TUNEIS E SERVICOS RELACIONADOS',
+                       '5222-2/00': 'TERMINAIS RODOVIARIOS E FERROVIARIOS',
+                       '5223-1/00': 'ESTACIONAMENTO DE VEICULOS',
+                       '5229-0/01': 'SERVICOS DE APOIO AO TRANSPORTE POR TAXI, INCLUSIVE CENTRAIS DE CHAMADA',
+                       '5229-0/02': 'SERVICOS DE REBOQUE DE VEICULOS',
+                       '5229-0/99': 'OUTRAS ATIVIDADES AUXILIARES DOS TRANSPORTES TERRESTRES NAO ESPECIFICADAS ANTERIORMENTE',
+                       '5231-1/01': 'ADMINISTRACAO DA INFRA-ESTRUTURA PORTUARIA',
+                       '5231-1/02': 'ATIVIDADES DO OPERADOR PORTUARIO',
+                       '5231-1/03': 'GESTAO DE TERMINAIS AQUAVIARIOS ',
+                       '5232-0/00': 'ATIVIDADES DE AGENCIAMENTO MARITIMO',
+                       '5239-7/01': 'SERVICOS DE PRATICAGEM',
+                       '5239-7/99': 'ATIVIDADES AUXILIARES DOS TRANSPORTES AQUAVIARIOS NAO ESPECIFICADAS ANTERIORMENTE',
+                       '5240-1/01': 'OPERACAO DOS AEROPORTOS E CAMPOS DE ATERRISSAGEM',
+                       '5240-1/99': 'ATIVIDADES AUXILIARES DOS TRANSPORTES AEREOS, EXCETO OPERACAO DOS AEROPORTOS E CAMPOS DE ATERRISSAGEM',
+                       '5250-8/01': 'COMISSARIA DE DESPACHOS',
+                       '5250-8/02': 'ATIVIDADES DE DESPACHANTES ADUANEIROS',
+                       '5250-8/03': 'AGENCIAMENTO DE CARGAS, EXCETO PARA O TRANSPORTE MARITIMO',
+                       '5250-8/04': 'ORGANIZACAO LOGISTICA DO TRANSPORTE DE CARGA',
+                       '5250-8/05': 'OPERADOR DE TRANSPORTE MULTIMODAL - OTM',
+                       '5310-5/01': 'ATIVIDADES DO CORREIO NACIONAL',
+                       '5310-5/02': 'ATIVIDADES DE FRANQUEADAS E PERMISSIONARIAS DO CORREIO NACIONAL',
+                       '5320-2/01': 'SERVICOS DE MALOTE NAO REALIZADOS PELO CORREIO NACIONAL',
+                       '5320-2/02': 'SERVICOS DE ENTREGA RAPIDA',
+                       '5510-8/01': 'HOTEIS',
+                       '5510-8/02': 'APART-HOTEIS',
+                       '5510-8/03': 'MOTEIS',
+                       '5590-6/01': 'ALBERGUES, EXCETO ASSISTENCIAIS',
+                       '5590-6/02': 'CAMPINGS',
+                       '5590-6/03': 'PENSOES (ALOJAMENTO)',
+                       '5590-6/99': 'OUTROS ALOJAMENTOS NAO ESPECIFICADOS ANTERIORMENTE',
+                       '5611-2/01': 'RESTAURANTES E SIMILARES',
+                       '5611-2/02': 'BARES E OUTROS ESTABELECIMENTOS ESPECIALIZADOS EM SERVIR BEBIDAS',
+                       '5611-2/03': 'LANCHONETES, CASAS DE CHA, DE SUCOS E SIMILARES',
+                       '5612-1/00': 'SERVICOS AMBULANTES DE ALIMENTACAO',
+                       '5620-1/01': 'FORNECIMENTO DE ALIMENTOS PREPARADOS PREPONDERANTEMENTE PARA EMPRESAS',
+                       '5620-1/02': 'SERVICOS DE ALIMENTACAO PARA EVENTOS E RECEPCOES - BUFE',
+                       '5620-1/03': 'CANTINAS - SERVICOS DE ALIMENTACAO PRIVATIVOS',
+                       '5620-1/04': 'FORNECIMENTO DE ALIMENTOS PREPARADOS PREPONDERANTEMENTE PARA CONSUMO DOMICILIAR',
+                       '5811-5/00': 'EDICAO DE LIVROS',
+                       '5812-3/00': 'EDICAO DE JORNAIS DIARIOS',
+                       '5812-3/01': 'EDICAO DE JORNAIS DIARIOS',
+                       '5812-3/02': 'EDICAO DE JORNAIS NAO DIARIOS',
+                       '5813-1/00': 'EDICAO DE REVISTAS',
+                       '5819-1/00': 'EDICAO DE CADASTROS, LISTAS E OUTROS PRODUTOS GRAFICOS',
+                       '5821-2/00': 'EDICAO INTEGRADA A IMPRESSAO DE LIVROS',
+                       '5822-1/01': 'EDICAO INTEGRADA A IMPRESSAO DE JORNAIS DIARIOS',
+                       '5822-1/02': 'EDICAO INTEGRADA A IMPRESSAO DE JORNAIS NAO DIARIOS',
+                       '5823-9/00': 'EDICAO INTEGRADA A IMPRESSAO DE REVISTAS',
+                       '5829-8/00': 'EDICAO INTEGRADA A IMPRESSAO DE CADASTROS, LISTAS E OUTROS PRODUTOS GRAFICOS',
+                       '5911-1/01': 'ESTUDIOS CINEMATOGRAFICOS',
+                       '5911-1/02': 'PRODUCAO DE FILMES PARA PUBLICIDADE',
+                       '5911-1/99': 'ATIVIDADES DE PRODUCAO CINEMATOGRAFICA, DE VIDEOS E DE PROGRAMAS DE TELEVISAO NAO ESPECIFICADAS ANTERIORMENTE',
+                       '5912-0/01': 'SERVICOS DE DUBLAGEM',
+                       '5912-0/02': 'SERVICOS DE MIXAGEM SONORA EM PRODUCAO AUDIOVISUAL',
+                       '5912-0/99': 'ATIVIDADES DE POS-PRODUCAO CINEMATOGRAFICA, DE VIDEOS E DE PROGRAMAS DE TELEVISAO NAO ESPECIFICADAS ANTERIORMENTE',
+                       '5913-8/00': 'DISTRIBUICAO CINEMATOGRAFICA, DE VIDEO E DE PROGRAMAS DE TELEVISAO',
+                       '5914-6/00': 'ATIVIDADES DE EXIBICAO CINEMATOGRAFICA',
+                       '5920-1/00': 'ATIVIDADES DE GRAVACAO DE SOM E DE EDICAO DE MUSICA',
+                       '6010-1/00': 'ATIVIDADES DE RADIO',
+                       '6021-7/00': 'ATIVIDADES DE TELEVISAO ABERTA',
+                       '6022-5/01': 'PROGRAMADORAS',
+                       '6022-5/02': 'ATIVIDADES RELACIONADAS A TELEVISAO POR ASSINATURA, EXCETO PROGRAMADORAS',
+                       '6110-8/01': 'SERVICOS DE TELEFONIA FIXA COMUTADA - STFC',
+                       '6110-8/02': 'SERVICOS DE REDES DE TRANSPORTE DE TELECOMUNICACOES - SRTT',
+                       '6110-8/03': 'SERVICOS DE COMUNICACAO MULTIMIDIA - SCM',
+                       '6110-8/99': 'SERVICOS DE TELECOMUNICACOES POR FIO NAO ESPECIFICADOS ANTERIORMENTE',
+                       '6120-5/01': 'TELEFONIA MOVEL CELULAR',
+                       '6120-5/02': 'SERVICO MOVEL ESPECIALIZADO - SME',
+                       '6120-5/99': 'SERVICOS DE TELECOMUNICACOES SEM FIO NAO ESPECIFICADOS ANTERIORMENTE',
+                       '6130-2/00': 'TELECOMUNICACOES POR SATELITE',
+                       '6141-8/00': 'OPERADORAS DE TELEVISAO POR ASSINATURA POR CABO',
+                       '6142-6/00': 'OPERADORAS DE TELEVISAO POR ASSINATURA POR MICROONDAS',
+                       '6143-4/00': 'OPERADORAS DE TELEVISAO POR ASSINATURA POR SATELITE',
+                       '6190-6/01': 'PROVEDORES DE ACESSO AS REDES DE COMUNICACOES',
+                       '6190-6/02': 'PROVEDORES DE VOZ SOBRE PROTOCOLO INTERNET - VOIP',
+                       '6190-6/99': 'OUTRAS ATIVIDADES DE TELECOMUNICACOES NAO ESPECIFICADAS ANTERIORMENTE',
+                       '6201-5/01': 'DESENVOLVIMENTO DE PROGRAMAS DE COMPUTADOR SOB ENCOMENDA',
+                       '6201-5/02': 'WEB DESIGN',
+                       '6202-3/00': 'DESENVOLVIMENTO E LICENCIAMENTO DE PROGRAMAS DE COMPUTADOR CUSTOMIZAVEIS',
+                       '6203-1/00': 'DESENVOLVIMENTO E LICENCIAMENTO DE PROGRAMAS DE COMPUTADOR NAO-CUSTOMIZAVEIS',
+                       '6204-0/00': 'CONSULTORIA EM TECNOLOGIA DA INFORMACAO',
+                       '6209-1/00': 'SUPORTE TECNICO, MANUTENCAO E OUTROS SERVICOS EM TECNOLOGIA DA INFORMACAO',
+                       '6311-9/00': 'TRATAMENTO DE DADOS, PROVEDORES DE SERVICOS DE APLICACAO E SERVICOS DE HOSPEDAGEM NA INTERNET',
+                       '6319-4/00': 'PORTAIS, PROVEDORES DE CONTEUDO E OUTROS SERVICOS DE INFORMACAO NA INTERNET',
+                       '6391-7/00': 'AGENCIAS DE NOTICIAS',
+                       '6399-2/00': 'OUTRAS ATIVIDADES DE PRESTACAO DE SERVICOS DE INFORMACAO NAO ESPECIFICADAS ANTERIORMENTE',
+                       '6410-7/00': 'BANCO CENTRAL',
+                       '6421-2/00': 'BANCOS COMERCIAIS',
+                       '6422-1/00': 'BANCOS MULTIPLOS, COM CARTEIRA COMERCIAL',
+                       '6423-9/00': 'CAIXAS ECONOMICAS',
+                       '6424-7/01': 'BANCOS COOPERATIVOS',
+                       '6424-7/02': 'COOPERATIVAS CENTRAIS DE CREDITO',
+                       '6424-7/03': 'COOPERATIVAS DE CREDITO MUTUO',
+                       '6424-7/04': 'COOPERATIVAS DE CREDITO RURAL',
+                       '6431-0/00': 'BANCOS MULTIPLOS, SEM CARTEIRA COMERCIAL',
+                       '6432-8/00': 'BANCOS DE INVESTIMENTO',
+                       '6433-6/00': 'BANCOS DE DESENVOLVIMENTO',
+                       '6434-4/00': 'AGENCIAS DE FOMENTO',
+                       '6435-2/01': 'SOCIEDADES DE CREDITO IMOBILIARIO',
+                       '6435-2/02': 'ASSOCIACOES DE POUPANCA E EMPRESTIMO',
+                       '6435-2/03': 'COMPANHIAS HIPOTECARIAS',
+                       '6436-1/00': 'SOCIEDADES DE CREDITO, FINANCIAMENTO E INVESTIMENTO - FINANCEIRAS',
+                       '6437-9/00': 'SOCIEDADES DE CREDITO AO MICROEMPREENDEDOR',
+                       '6438-7/01': 'BANCOS DE CAMBIO',
+                       '6438-7/99': 'OUTRAS INSTITUICOES DE INTERMEDIACAO NAO-MONETARIA NAO ESPECIFICADAS ANTERIORMENTE',
+                       '6440-9/00': 'ARRENDAMENTO MERCANTIL',
+                       '6450-6/00': 'SOCIEDADES DE CAPITALIZACAO',
+                       '6461-1/00': 'HOLDINGS DE INSTITUICOES FINANCEIRAS',
+                       '6462-0/00': 'HOLDINGS DE INSTITUICOES NAO-FINANCEIRAS',
+                       '6463-8/00': 'OUTRAS SOCIEDADES DE PARTICIPACAO, EXCETO HOLDINGS',
+                       '6470-1/01': 'FUNDOS DE INVESTIMENTO, EXCETO PREVIDENCIARIOS E IMOBILIARIOS',
+                       '6470-1/02': 'FUNDOS DE INVESTIMENTO PREVIDENCIARIOS',
+                       '6470-1/03': 'FUNDOS DE INVESTIMENTO IMOBILIARIOS',
+                       '6491-3/00': 'SOCIEDADES DE FOMENTO MERCANTIL - FACTORING',
+                       '6492-1/00': 'SECURITIZACAO DE CREDITOS',
+                       '6493-0/00': 'ADMINISTRACAO DE CONSORCIOS PARA AQUISICAO DE BENS E DIREITOS',
+                       '6499-9/01': 'CLUBES DE INVESTIMENTO',
+                       '6499-9/02': 'SOCIEDADES DE INVESTIMENTO',
+                       '6499-9/03': 'FUNDO GARANTIDOR DE CREDITO',
+                       '6499-9/04': 'CAIXAS DE FINANCIAMENTO DE CORPORACOES',
+                       '6499-9/05': 'CONCESSAO DE CREDITO PELAS OSCIP',
+                       '6499-9/99': 'OUTRAS ATIVIDADES DE SERVICOS FINANCEIROS NAO ESPECIFICADAS ANTERIORMENTE',
+                       '6511-1/01': 'SOCIEDADE SEGURADORA DE SEGUROS VIDA',
+                       '6511-1/02': 'PLANOS DE AUXILIO-FUNERAL',
+                       '6512-0/00': 'SOCIEDADE SEGURADORA DE SEGUROS NAO VIDA',
+                       '6520-1/00': 'SOCIEDADE SEGURADORA DE SEGUROS SAUDE',
+                       '6530-8/00': 'RESSEGUROS',
+                       '6541-3/00': 'PREVIDENCIA COMPLEMENTAR FECHADA',
+                       '6542-1/00': 'PREVIDENCIA COMPLEMENTAR ABERTA',
+                       '6550-2/00': 'PLANOS DE SAUDE',
+                       '6611-8/01': 'BOLSA DE VALORES',
+                       '6611-8/02': 'BOLSA DE MERCADORIAS',
+                       '6611-8/03': 'BOLSA DE MERCADORIAS E FUTUROS',
+                       '6611-8/04': 'ADMINISTRACAO DE MERCADOS DE BALCAO ORGANIZADOS',
+                       '6612-6/01': 'CORRETORAS DE TITULOS E VALORES MOBILIARIOS',
+                       '6612-6/02': 'DISTRIBUIDORAS DE TITULOS E VALORES MOBILIARIOS',
+                       '6612-6/03': 'CORRETORAS DE CAMBIO',
+                       '6612-6/04': 'CORRETORAS DE CONTRATOS DE MERCADORIAS',
+                       '6612-6/05': 'AGENTES DE INVESTIMENTOS EM APLICACOES FINANCEIRAS',
+                       '6613-4/00': 'ADMINISTRACAO DE CARTOES DE CREDITO',
+                       '6619-3/01': 'SERVICOS DE LIQUIDACAO E CUSTODIA',
+                       '6619-3/02': 'CORRESPONDENTES DE INSTITUICOES FINANCEIRAS',
+                       '6619-3/03': 'REPRESENTACOES DE BANCOS ESTRANGEIROS',
+                       '6619-3/04': 'CAIXAS ELETRONICOS',
+                       '6619-3/05': 'OPERADORAS DE CARTOES DE DEBITO',
+                       '6619-3/99': 'OUTRAS ATIVIDADES AUXILIARES DOS SERVICOS FINANCEIROS NAO ESPECIFICADAS ANTERIORMENTE',
+                       '6621-5/01': 'PERITOS E AVALIADORES DE SEGUROS',
+                       '6621-5/02': 'AUDITORIA E CONSULTORIA ATUARIAL',
+                       '6622-3/00': 'CORRETORES E AGENTES DE SEGUROS, DE PLANOS DE PREVIDENCIA COMPLEMENTAR E DE SAUDE',
+                       '6629-1/00': 'ATIVIDADES AUXILIARES DOS SEGUROS, DA PREVIDENCIA COMPLEMENTAR E DOS PLANOS DE SAUDE NAO ESPECIFICADAS ANTERIORMENTE',
+                       '6630-4/00': 'ATIVIDADES DE ADMINISTRACAO DE FUNDOS POR CONTRATO OU COMISSAO',
+                       '6810-2/01': 'COMPRA E VENDA DE IMOVEIS PROPRIOS',
+                       '6810-2/02': 'ALUGUEL DE IMOVEIS PROPRIOS',
+                       '6810-2/03': 'LOTEAMENTO DE IMOVEIS PROPRIOS',
+                       '6821-8/01': 'CORRETAGEM NA COMPRA E VENDA E AVALIACAO DE IMOVEIS',
+                       '6821-8/02': 'CORRETAGEM NO ALUGUEL DE IMOVEIS',
+                       '6822-6/00': 'GESTAO E ADMINISTRACAO DA PROPRIEDADE IMOBILIARIA',
+                       '6911-7/01': 'SERVICOS ADVOCATICIOS',
+                       '6911-7/02': 'ATIVIDADES AUXILIARES DA JUSTICA',
+                       '6911-7/03': 'AGENTE DE PROPRIEDADE INDUSTRIAL',
+                       '6912-5/00': 'CARTORIOS',
+                       '6920-6/01': 'ATIVIDADES DE CONTABILIDADE',
+                       '6920-6/02': 'ATIVIDADES DE CONSULTORIA E AUDITORIA CONTABIL E TRIBUTARIA',
+                       '7020-4/00': 'ATIVIDADES DE CONSULTORIA EM GESTAO EMPRESARIAL, EXCETO CONSULTORIA TECNICA ESPECIFICA',
+                       '7111-1/00': 'SERVICOS DE ARQUITETURA',
+                       '7112-0/00': 'SERVICOS DE ENGENHARIA',
+                       '7119-7/01': 'SERVICOS DE CARTOGRAFIA, TOPOGRAFIA E GEODESIA',
+                       '7119-7/02': 'ATIVIDADES DE ESTUDOS GEOLOGICOS',
+                       '7119-7/03': 'SERVICOS DE DESENHO TECNICO RELACIONADOS A ARQUITETURA E ENGENHARIA',
+                       '7119-7/04': 'SERVICOS DE PERICIA TECNICA RELACIONADOS A SEGURANCA DO TRABALHO',
+                       '7119-7/99': 'ATIVIDADES TECNICAS RELACIONADAS A ENGENHARIA E ARQUITETURA NAO ESPECIFICADAS ANTERIORMENTE',
+                       '7120-1/00': 'TESTES E ANALISES TECNICAS',
+                       '7210-0/00': 'PESQUISA E DESENVOLVIMENTO EXPERIMENTAL EM CIENCIAS FISICAS E NATURAIS',
+                       '7220-7/00': 'PESQUISA E DESENVOLVIMENTO EXPERIMENTAL EM CIENCIAS SOCIAIS E HUMANAS',
+                       '7311-4/00': 'AGENCIAS DE PUBLICIDADE',
+                       '7312-2/00': 'AGENCIAMENTO DE ESPACOS PARA PUBLICIDADE, EXCETO EM VEICULOS DE COMUNICACAO',
+                       '7319-0/01': 'CRIACAO DE ESTANDES PARA FEIRAS E EXPOSICOES',
+                       '7319-0/02': 'PROMOCAO DE VENDAS',
+                       '7319-0/03': 'MARKETING DIRETO',
+                       '7319-0/04': 'CONSULTORIA EM PUBLICIDADE',
+                       '7319-0/99': 'OUTRAS ATIVIDADES DE PUBLICIDADE NAO ESPECIFICADAS ANTERIORMENTE',
+                       '7320-3/00': 'PESQUISAS DE MERCADO E DE OPINIAO PUBLICA',
+                       '7410-2/02': 'DESIGN DE INTERIORES',
+                       '7410-2/03': 'DESIGN DE PRODUTO',
+                       '7410-2/99': 'ATIVIDADES DE DESIGN NAO ESPECIFICADAS ANTERIORMENTE',
+                       '7420-0/01': 'ATIVIDADES DE PRODUCAO DE FOTOGRAFIAS, EXCETO AEREA E SUBMARINA',
+                       '7420-0/02': 'ATIVIDADES DE PRODUCAO DE FOTOGRAFIAS AEREAS E SUBMARINAS',
+                       '7420-0/03': 'LABORATORIOS FOTOGRAFICOS',
+                       '7420-0/04': 'FILMAGEM DE FESTAS E EVENTOS',
+                       '7420-0/05': 'SERVICOS DE MICROFILMAGEM',
+                       '7490-1/01': 'SERVICOS DE TRADUCAO, INTERPRETACAO E SIMILARES',
+                       '7490-1/02': 'ESCAFANDRIA E MERGULHO',
+                       '7490-1/03': 'SERVICOS DE AGRONOMIA E DE CONSULTORIA AS ATIVIDADES AGRICOLAS E PECUARIAS',
+                       '7490-1/04': 'ATIVIDADES DE INTERMEDIACAO E AGENCIAMENTO DE SERVICOS E NEGOCIOS EM GERAL, EXCETO IMOBILIARIOS',
+                       '7490-1/05': 'AGENCIAMENTO DE PROFISSIONAIS PARA ATIVIDADES ESPORTIVAS, CULTURAIS E ARTISTICAS',
+                       '7490-1/99': 'OUTRAS ATIVIDADES PROFISSIONAIS, CIENTIFICAS E TECNICAS NAO ESPECIFICADAS ANTERIORMENTE',
+                       '7500-1/00': 'ATIVIDADES VETERINARIAS',
+                       '7711-0/00': 'LOCACAO DE AUTOMOVEIS SEM CONDUTOR',
+                       '7719-5/01': 'LOCACAO DE EMBARCACOES SEM TRIPULACAO, EXCETO PARA FINS RECREATIVOS',
+                       '7719-5/02': 'LOCACAO DE AERONAVES SEM TRIPULACAO',
+                       '7719-5/99': 'LOCACAO DE OUTROS MEIOS DE TRANSPORTE NAO ESPECIFICADOS ANTERIORMENTE, SEM CONDUTOR',
+                       '7721-7/00': 'ALUGUEL DE EQUIPAMENTOS RECREATIVOS E ESPORTIVOS',
+                       '7722-5/00': 'ALUGUEL DE FITAS DE VIDEO, DVDS E SIMILARES',
+                       '7723-3/00': 'ALUGUEL DE OBJETOS DO VESTUARIO, JOIAS E ACESSORIOS',
+                       '7729-2/01': 'ALUGUEL DE APARELHOS DE JOGOS ELETRONICOS',
+                       '7729-2/02': 'ALUGUEL DE MOVEIS, UTENSILIOS E APARELHOS DE USO DOMESTICO E PESSOAL; INSTRUMENTOS MUSICAIS',
+                       '7729-2/03': 'ALUGUEL DE MATERIAL MEDICO',
+                       '7729-2/99': 'ALUGUEL DE OUTROS OBJETOS PESSOAIS E DOMESTICOS NAO ESPECIFICADOS ANTERIORMENTE',
+                       '7731-4/00': 'ALUGUEL DE MAQUINAS E EQUIPAMENTOS AGRICOLAS SEM OPERADOR',
+                       '7732-2/01': 'ALUGUEL DE MAQUINAS E EQUIPAMENTOS PARA CONSTRUCAO SEM OPERADOR, EXCETO ANDAIMES',
+                       '7732-2/02': 'ALUGUEL DE ANDAIMES',
+                       '7733-1/00': 'ALUGUEL DE MAQUINAS E EQUIPAMENTOS PARA ESCRITORIO',
+                       '7739-0/01': 'ALUGUEL DE MAQUINAS E EQUIPAMENTOS PARA EXTRACAO DE MINERIOS E PETROLEO, SEM OPERADOR',
+                       '7739-0/02': 'ALUGUEL DE EQUIPAMENTOS CIENTIFICOS, MEDICOS E HOSPITALARES, SEM OPERADOR',
+                       '7739-0/03': 'ALUGUEL DE PALCOS, COBERTURAS E OUTRAS ESTRUTURAS DE USO TEMPORARIO, EXCETO ANDAIMES',
+                       '7739-0/99': 'ALUGUEL DE OUTRAS MAQUINAS E EQUIPAMENTOS COMERCIAIS E INDUSTRIAIS NAO ESPECIFICADOS ANTERIORMENTE, SEM OPERADOR',
+                       '7740-3/00': 'GESTAO DE ATIVOS INTANGIVEIS NAO-FINANCEIROS',
+                       '7810-8/00': 'SELECAO E AGENCIAMENTO DE MAO-DE-OBRA',
+                       '7820-5/00': 'LOCACAO DE MAO-DE-OBRA TEMPORARIA',
+                       '7830-2/00': 'FORNECIMENTO E GESTAO DE RECURSOS HUMANOS PARA TERCEIROS',
+                       '7911-2/00': 'AGENCIAS DE VIAGENS',
+                       '7912-1/00': 'OPERADORES TURISTICOS',
+                       '7990-2/00': 'SERVICOS DE RESERVAS E OUTROS SERVICOS DE TURISMO NAO ESPECIFICADOS ANTERIORMENTE',
+                       '8011-1/01': 'ATIVIDADES DE VIGILANCIA E SEGURANCA PRIVADA',
+                       '8011-1/02': 'SERVICOS DE ADESTRAMENTO DE CAES DE GUARDA',
+                       '8012-9/00': 'ATIVIDADES DE TRANSPORTE DE VALORES',
+                       '8020-0/01': 'ATIVIDADES DE MONITORAMENTO DE SISTEMAS DE SEGURANCA ELETRONICO',
+                       '8020-0/02': 'OUTRAS ATIVIDADES DE SERVICOS DE SEGURANCA',
+                       '8030-7/00': 'ATIVIDADES DE INVESTIGACAO PARTICULAR',
+                       '8111-7/00': 'SERVICOS COMBINADOS PARA APOIO A EDIFICIOS, EXCETO CONDOMINIOS PREDIAIS',
+                       '8112-5/00': 'CONDOMINIOS PREDIAIS',
+                       '8121-4/00': 'LIMPEZA EM PREDIOS E EM DOMICILIOS',
+                       '8122-2/00': 'IMUNIZACAO E CONTROLE DE PRAGAS URBANAS',
+                       '8129-0/00': 'ATIVIDADES DE LIMPEZA NAO ESPECIFICADAS ANTERIORMENTE',
+                       '8130-3/00': 'ATIVIDADES PAISAGISTICAS',
+                       '8211-3/00': 'SERVICOS COMBINADOS DE ESCRITORIO E APOIO ADMINISTRATIVO',
+                       '8219-9/01': 'FOTOCOPIAS',
+                       '8219-9/99': 'PREPARACAO DE DOCUMENTOS E SERVICOS ESPECIALIZADOS DE APOIO ADMINISTRATIVO NAO ESPECIFICADOS ANTERIORMENTE',
+                       '8220-2/00': 'ATIVIDADES DE TELEATENDIMENTO',
+                       '8230-0/01': 'SERVICOS DE ORGANIZACAO DE FEIRAS, CONGRESSOS, EXPOSICOES E FESTAS',
+                       '8230-0/02': 'CASAS DE FESTAS E EVENTOS',
+                       '8291-1/00': 'ATIVIDADES DE COBRANCA E INFORMACOES CADASTRAIS',
+                       '8292-0/00': 'ENVASAMENTO E EMPACOTAMENTO SOB CONTRATO',
+                       '8299-7/01': 'MEDICAO DE CONSUMO DE ENERGIA ELETRICA, GAS E AGUA',
+                       '8299-7/02': 'EMISSAO DE VALES-ALIMENTACAO, VALES-TRANSPORTE E SIMILARES',
+                       '8299-7/03': 'SERVICOS DE GRAVACAO DE CARIMBOS, EXCETO CONFECCAO',
+                       '8299-7/04': 'LEILOEIROS INDEPENDENTES',
+                       '8299-7/05': 'SERVICOS DE LEVANTAMENTO DE FUNDOS SOB CONTRATO',
+                       '8299-7/06': 'CASAS LOTERICAS',
+                       '8299-7/07': 'SALAS DE ACESSO A INTERNET',
+                       '8299-7/99': 'OUTRAS ATIVIDADES DE SERVICOS PRESTADOS PRINCIPALMENTE AS EMPRESAS NAO ESPECIFICADAS ANTERIORMENTE',
+                       '8411-6/00': 'ADMINISTRACAO PUBLICA EM GERAL',
+                       '8412-4/00': 'REGULACAO DAS ATIVIDADES DE SAUDE, EDUCACAO, SERVICOS CULTURAIS E OUTROS SERVICOS SOCIAIS',
+                       '8413-2/00': 'REGULACAO DAS ATIVIDADES ECONOMICAS',
+                       '8421-3/00': 'RELACOES EXTERIORES',
+                       '8422-1/00': 'DEFESA',
+                       '8423-0/00': 'JUSTICA',
+                       '8424-8/00': 'SEGURANCA E ORDEM PUBLICA',
+                       '8425-6/00': 'DEFESA CIVIL',
+                       '8430-2/00': 'SEGURIDADE SOCIAL OBRIGATORIA',
+                       '8511-2/00': 'EDUCACAO INFANTIL - CRECHE',
+                       '8512-1/00': 'EDUCACAO INFANTIL - PRE-ESCOLA',
+                       '8513-9/00': 'ENSINO FUNDAMENTAL',
+                       '8520-1/00': 'ENSINO MEDIO',
+                       '8531-7/00': 'EDUCACAO SUPERIOR - GRADUACAO',
+                       '8532-5/00': 'EDUCACAO SUPERIOR - GRADUACAO E POS-GRADUACAO',
+                       '8533-3/00': 'EDUCACAO SUPERIOR - POS-GRADUACAO E EXTENSAO',
+                       '8541-4/00': 'EDUCACAO PROFISSIONAL DE NIVEL TECNICO',
+                       '8542-2/00': 'EDUCACAO PROFISSIONAL DE NIVEL TECNOLOGICO',
+                       '8550-3/01': 'ADMINISTRACAO DE CAIXAS ESCOLARES',
+                       '8550-3/02': 'ATIVIDADES DE APOIO A EDUCACAO, EXCETO CAIXAS ESCOLARES',
+                       '8591-1/00': 'ENSINO DE ESPORTES',
+                       '8592-9/01': 'ENSINO DE DANCA',
+                       '8592-9/02': 'ENSINO DE ARTES CENICAS, EXCETO DANCA',
+                       '8592-9/03': 'ENSINO DE MUSICA',
+                       '8592-9/99': 'ENSINO DE ARTE E CULTURA NAO ESPECIFICADO ANTERIORMENTE',
+                       '8593-7/00': 'ENSINO DE IDIOMAS',
+                       '8599-6/01': 'FORMACAO DE CONDUTORES',
+                       '8599-6/02': 'CURSOS DE PILOTAGEM',
+                       '8599-6/03': 'TREINAMENTO EM INFORMATICA',
+                       '8599-6/04': 'TREINAMENTO EM DESENVOLVIMENTO PROFISSIONAL E GERENCIAL',
+                       '8599-6/05': 'CURSOS PREPARATORIOS PARA CONCURSOS',
+                       '8599-6/99': 'OUTRAS ATIVIDADES DE ENSINO NAO ESPECIFICADAS ANTERIORMENTE',
+                       '8610-1/01': 'ATIVIDADES DE ATENDIMENTO HOSPITALAR, EXCETO PRONTO-SOCORRO E UNIDADES PARA ATENDIMENTO A URGENCIAS',
+                       '8610-1/02': 'ATIVIDADES DE ATENDIMENTO EM PRONTO-SOCORRO E UNIDADES HOSPITALARES PARA ATENDIMENTO A URGENCIAS',
+                       '8621-6/01': 'UTI MOVEL',
+                       '8621-6/02': 'SERVICOS MOVEIS DE ATENDIMENTO A URGENCIAS, EXCETO POR UTI MOVEL',
+                       '8622-4/00': 'SERVICOS DE REMOCAO DE PACIENTES, EXCETO OS SERVICOS MOVEIS DE ATENDIMENTO A URGENCIAS',
+                       '8630-5/01': 'ATIVIDADE MEDICA AMBULATORIAL COM RECURSOS PARA REALIZACAO DE PROCEDIMENTOS CIRURGICOS',
+                       '8630-5/02': 'ATIVIDADE MEDICA AMBULATORIAL COM RECURSOS PARA REALIZACAO DE EXAMES COMPLEMENTARES',
+                       '8630-5/03': 'ATIVIDADE MEDICA AMBULATORIAL RESTRITA A CONSULTAS',
+                       '8630-5/04': 'ATIVIDADE ODONTOLOGICA',
+                       '8630-5/06': 'SERVICOS DE VACINACAO E IMUNIZACAO HUMANA',
+                       '8630-5/07': 'ATIVIDADES DE REPRODUCAO HUMANA ASSISTIDA',
+                       '8630-5/99': 'ATIVIDADES DE ATENCAO AMBULATORIAL NAO ESPECIFICADAS ANTERIORMENTE',
+                       '8640-2/01': 'LABORATORIOS DE ANATOMIA PATOLOGICA E CITOLOGICA',
+                       '8640-2/02': 'LABORATORIOS CLINICOS',
+                       '8640-2/03': 'SERVICOS DE DIALISE E NEFROLOGIA',
+                       '8640-2/04': 'SERVICOS DE TOMOGRAFIA',
+                       '8640-2/05': 'SERVICOS DE DIAGNOSTICO POR IMAGEM COM USO DE RADIACAO IONIZANTE, EXCETO TOMOGRAFIA',
+                       '8640-2/06': 'SERVICOS DE RESSONANCIA MAGNETICA',
+                       '8640-2/07': 'SERVICOS DE DIAGNOSTICO POR IMAGEM SEM USO DE RADIACAO IONIZANTE, EXCETO RESSONANCIA MAGNETICA',
+                       '8640-2/08': 'SERVICOS DE DIAGNOSTICO POR REGISTRO GRAFICO - ECG, EEG E OUTROS EXAMES ANALOGOS',
+                       '8640-2/09': 'SERVICOS DE DIAGNOSTICO POR METODOS OPTICOS - ENDOSCOPIA E OUTROS EXAMES ANALOGOS',
+                       '8640-2/10': 'SERVICOS DE QUIMIOTERAPIA',
+                       '8640-2/11': 'SERVICOS DE RADIOTERAPIA',
+                       '8640-2/12': 'SERVICOS DE HEMOTERAPIA',
+                       '8640-2/13': 'SERVICOS DE LITOTRIPSIA',
+                       '8640-2/14': 'SERVICOS DE BANCOS DE CELULAS E TECIDOS HUMANOS',
+                       '8640-2/99': 'ATIVIDADES DE SERVICOS DE COMPLEMENTACAO DIAGNOSTICA E TERAPEUTICA NAO ESPECIFICADAS ANTERIORMENTE',
+                       '8650-0/01': 'ATIVIDADES DE ENFERMAGEM',
+                       '8650-0/02': 'ATIVIDADES DE PROFISSIONAIS DA NUTRICAO',
+                       '8650-0/03': 'ATIVIDADES DE PSICOLOGIA E PSICANALISE',
+                       '8650-0/04': 'ATIVIDADES DE FISIOTERAPIA',
+                       '8650-0/05': 'ATIVIDADES DE TERAPIA OCUPACIONAL',
+                       '8650-0/06': 'ATIVIDADES DE FONOAUDIOLOGIA',
+                       '8650-0/07': 'ATIVIDADES DE TERAPIA DE NUTRICAO ENTERAL E PARENTERAL',
+                       '8650-0/99': 'ATIVIDADES DE PROFISSIONAIS DA AREA DE SAUDE NAO ESPECIFICADAS ANTERIORMENTE',
+                       '8660-7/00': 'ATIVIDADES DE APOIO A GESTAO DE SAUDE',
+                       '8690-9/01': 'ATIVIDADES DE PRATICAS INTEGRATIVAS E COMPLEMENTARES EM SAUDE HUMANA',
+                       '8690-9/02': 'ATIVIDADES DE BANCOS DE LEITE HUMANO',
+                       '8690-9/03': 'ATIVIDADES DE ACUPUNTURA',
+                       '8690-9/04': 'ATIVIDADES DE PODOLOGIA',
+                       '8690-9/99': 'OUTRAS ATIVIDADES DE ATENCAO A SAUDE HUMANA NAO ESPECIFICADAS ANTERIORMENTE',
+                       '8711-5/01': 'CLINICAS E RESIDENCIAS GERIATRICAS',
+                       '8711-5/02': 'INSTITUICOES DE LONGA PERMANENCIA PARA IDOSOS',
+                       '8711-5/03': 'ATIVIDADES DE ASSISTENCIA A DEFICIENTES FISICOS, IMUNODEPRIMIDOS E CONVALESCENTES',
+                       '8711-5/04': 'CENTROS DE APOIO A PACIENTES COM CANCER E COM AIDS',
+                       '8711-5/05': 'CONDOMINIOS RESIDENCIAIS PARA IDOSOS',
+                       '8712-3/00': 'ATIVIDADES DE FORNECIMENTO DE INFRA-ESTRUTURA DE APOIO E ASSISTENCIA A PACIENTE NO DOMICILIO',
+                       '8720-4/01': 'ATIVIDADES DE CENTROS DE ASSISTENCIA PSICOSSOCIAL',
+                       '8720-4/99': 'ATIVIDADES DE ASSISTENCIA PSICOSSOCIAL E A SAUDE A PORTADORES DE DISTURBIOS PSIQUICOS, DEFICIENCIA MENTAL E DEPENDENCIA QUIMICA NAO ESPECIFICADAS ANTERIORMENTE',
+                       '8730-1/01': 'ORFANATOS',
+                       '8730-1/02': 'ALBERGUES ASSISTENCIAIS',
+                       '8730-1/99': 'ATIVIDADES DE ASSISTENCIA SOCIAL PRESTADAS EM RESIDENCIAS COLETIVAS E PARTICULARES NAO ESPECIFICADAS ANTERIORMENTE',
+                       '8800-6/00': 'SERVICOS DE ASSISTENCIA SOCIAL SEM ALOJAMENTO',
+                       '8888-8/88': 'ATIVIDADE NAO INFORMADA',
+                       '9001-9/01': 'PRODUCAO TEATRAL',
+                       '9001-9/02': 'PRODUCAO MUSICAL',
+                       '9001-9/03': 'PRODUCAO DE ESPETACULOS DE DANCA',
+                       '9001-9/04': 'PRODUCAO DE ESPETACULOS CIRCENSES, DE MARIONETES E SIMILARES',
+                       '9001-9/05': 'PRODUCAO DE ESPETACULOS DE RODEIOS, VAQUEJADAS E SIMILARES',
+                       '9001-9/06': 'ATIVIDADES DE SONORIZACAO E DE ILUMINACAO',
+                       '9001-9/99': 'ARTES CENICAS, ESPETACULOS E ATIVIDADES COMPLEMENTARES NAO ESPECIFICAD[OA]S ANTERIORMENTE',
+                       '9002-7/01': 'ATIVIDADES DE ARTISTAS PLASTICOS, JORNALISTAS INDEPENDENTES E ESCRITORES',
+                       '9002-7/02': 'RESTAURACAO DE OBRAS DE ARTE',
+                       '9003-5/00': 'GESTAO DE ESPACOS PARA ARTES CENICAS, ESPETACULOS E OUTRAS ATIVIDADES ARTISTICAS',
+                       '9101-5/00': 'ATIVIDADES DE BIBLIOTECAS E ARQUIVOS',
+                       '9102-3/01': 'ATIVIDADES DE MUSEUS E DE EXPLORACAO DE LUGARES E PREDIOS HISTORICOS E ATRACOES SIMILARES',
+                       '9102-3/02': 'RESTAURACAO E CONSERVACAO DE LUGARES E PREDIOS HISTORICOS',
+                       '9103-1/00': 'ATIVIDADES DE JARDINS BOTANICOS, ZOOLOGICOS, PARQUES NACIONAIS, RESERVAS ECOLOGICAS E AREAS DE PROTECAO AMBIENTAL',
+                       '9200-3/01': 'CASAS DE BINGO',
+                       '9200-3/02': 'EXPLORACAO DE APOSTAS EM CORRIDAS DE CAVALOS',
+                       '9200-3/99': 'EXPLORACAO DE JOGOS DE AZAR E APOSTAS NAO ESPECIFICADOS ANTERIORMENTE',
+                       '9311-5/00': 'GESTAO DE INSTALACOES DE ESPORTES',
+                       '9312-3/00': 'CLUBES SOCIAIS, ESPORTIVOS E SIMILARES',
+                       '9313-1/00': 'ATIVIDADES DE CONDICIONAMENTO FISICO',
+                       '9319-1/01': 'PRODUCAO E PROMOCAO DE EVENTOS ESPORTIVOS',
+                       '9319-1/99': 'OUTRAS ATIVIDADES ESPORTIVAS NAO ESPECIFICADAS ANTERIORMENTE',
+                       '9321-2/00': 'PARQUES DE DIVERSAO E PARQUES TEMATICOS',
+                       '9329-8/01': 'DISCOTECAS, DANCETERIAS, SALOES DE DANCA E SIMILARES',
+                       '9329-8/02': 'EXPLORACAO DE BOLICHES',
+                       '9329-8/03': 'EXPLORACAO DE JOGOS DE SINUCA, BILHAR E SIMILARES',
+                       '9329-8/04': 'EXPLORACAO DE JOGOS ELETRONICOS RECREATIVOS',
+                       '9329-8/99': 'OUTRAS ATIVIDADES DE RECREACAO E LAZER NAO ESPECIFICADAS ANTERIORMENTE',
+                       '9411-1/00': 'ATIVIDADES DE ORGANIZACOES ASSOCIATIVAS PATRONAIS E EMPRESARIAIS',
+                       '9412-0/01': 'ATIVIDADES DE FISCALIZACAO PROFISSIONAL',
+                       '9412-0/99': 'OUTRAS ATIVIDADES ASSOCIATIVAS PROFISSIONAIS',
+                       '9420-1/00': 'ATIVIDADES DE ORGANIZACOES SINDICAIS',
+                       '9430-8/00': 'ATIVIDADES DE ASSOCIACOES DE DEFESA DE DIREITOS SOCIAIS',
+                       '9491-0/00': 'ATIVIDADES DE ORGANIZACOES RELIGIOSAS OU FILOSOFICAS',
+                       '9492-8/00': 'ATIVIDADES DE ORGANIZACOES POLITICAS',
+                       '9493-6/00': 'ATIVIDADES DE ORGANIZACOES ASSOCIATIVAS LIGADAS A CULTURA E A ARTE',
+                       '9499-5/00': 'ATIVIDADES ASSOCIATIVAS NAO ESPECIFICADAS ANTERIORMENTE',
+                       '9511-8/00': 'REPARACAO E MANUTENCAO DE COMPUTADORES E DE EQUIPAMENTOS PERIFERICOS',
+                       '9512-6/00': 'REPARACAO E MANUTENCAO DE EQUIPAMENTOS DE COMUNICACAO',
+                       '9521-5/00': 'REPARACAO E MANUTENCAO DE EQUIPAMENTOS ELETROELETRONICOS DE USO PESSOAL E DOMESTICO',
+                       '9529-1/01': 'REPARACAO DE CALCADOS, BOLSAS E ARTIGOS DE VIAGEM',
+                       '9529-1/02': 'CHAVEIROS',
+                       '9529-1/03': 'REPARACAO DE RELOGIOS',
+                       '9529-1/04': 'REPARACAO DE BICICLETAS, TRICICLOS E OUTROS VEICULOS NAO-MOTORIZADOS',
+                       '9529-1/05': 'REPARACAO DE ARTIGOS DO MOBILIARIO',
+                       '9529-1/06': 'REPARACAO DE JOIAS',
+                       '9529-1/99': 'REPARACAO E MANUTENCAO DE OUTROS OBJETOS E EQUIPAMENTOS PESSOAIS E DOMESTICOS NAO ESPECIFICADOS ANTERIORMENTE',
+                       '9601-7/01': 'LAVANDERIAS',
+                       '9601-7/02': 'TINTURARIAS',
+                       '9601-7/03': 'TOALHEIROS',
+                       '9602-5/01': 'CABELEIREIROS, MANICURE E PEDICURE',
+                       '9602-5/02': 'ATIVIDADES DE ESTETICA E OUTROS SERVICOS DE CUIDADOS COM A BELEZA',
+                       '9603-3/01': 'GESTAO E MANUTENCAO DE CEMITERIOS',
+                       '9603-3/02': 'SERVICOS DE CREMACAO',
+                       '9603-3/03': 'SERVICOS DE SEPULTAMENTO',
+                       '9603-3/04': 'SERVICOS DE FUNERARIAS',
+                       '9603-3/05': 'SERVICOS DE SOMATOCONSERVACAO',
+                       '9603-3/99': 'ATIVIDADES FUNERARIAS E SERVICOS RELACIONADOS NAO ESPECIFICADOS ANTERIORMENTE',
+                       '9609-2/02': 'AGENCIAS MATRIMONIAIS',
+                       '9609-2/04': 'EXPLORACAO DE MAQUINAS DE SERVICOS PESSOAIS ACIONADAS POR MOEDA',
+                       '9609-2/05': 'ATIVIDADES DE SAUNA E BANHOS',
+                       '9609-2/06': 'SERVICOS DE TATUAGEM E COLOCACAO DE PIERCING',
+                       '9609-2/07': 'ALOJAMENTO DE ANIMAIS DOMESTICOS',
+                       '9609-2/08': 'HIGIENE E EMBELEZAMENTO DE ANIMAIS DOMESTICOS',
+                       '9609-2/99': 'OUTRAS ATIVIDADES DE SERVICOS PESSOAIS NAO ESPECIFICADAS ANTERIORMENTE',
+                       '9700-5/00': 'SERVICOS DOMESTICOS',
+                       '9900-8/00': 'ORGANISMOS INTERNACIONAIS E OUTRAS INSTITUICOES EXTRATERRITORIAIS'}
+
+        # self.dic_cnae_23 = {}
+        # self.dic_cnae_20 = {}
+        # self.dic_cnae_10 = {}
+        # self.dic_cnae_20 = {'01.11-3': 'CULTIVO DE CEREAIS',
+        #                     '01.12-1': 'CULTIVO DE ALGODAO HERBACEO E DE OUTRAS FIBRAS DE LAVOURA TEMPORARIA',
+        #                     '01.13-0': 'CULTIVO DE ALGODAO HERBACEO E DE OUTRAS FIBRAS DE LAVOURA TEMPORARIA',
+        #                     '01.14-8': 'CULTIVO DE FUMO',
+        #                     '01.15-6': 'CULTIVO DE SOJA',
+        #                     '01.16-4': 'CULTIVO DE OLEAGINOSAS DE LAVOURA TEMPORARIA, EXCETO SOJA',
+        #                     '01.19-9': 'CULTIVO DE PLANTAS DE LAVOURA TEMPORARIA NAO ESPECIFICADAS ANTERIORMENTE',
+        #                     '01.21-1': 'HORTICULTURA',
+        #                     '01.22-9': 'CULTIVO DE FLORES E PLANTAS ORNAMENTAIS',
+        #                     '01.31-8': 'CULTIVO DE LARANJA',
+        #                     '01.32-6': 'CULTIVO DE UVA',
+        #                     '01.33-4': 'CULTIVO DE FRUTAS DE LAVOURA PERMANENTE, EXCETO LARANJA E UVA',
+        #                     '01.34-2': 'CULTIVO DE CAFE',
+        #                     '01.35-1': 'CULTIVO DE CACAU',
+        #                     '01.39-3': 'CULTIVO DE PLANTAS DE LAVOURA PERMANENTE NAO ESPECIFICADAS ANTERIORMENTE',
+        #                     '01.41-5': 'PRODUCAO DE SEMENTES CERTIFICADAS',
+        #                     '01.42-3': 'PRODUCAO DE MUDAS E OUTRAS FORMAS DE PROPAGACAO VEGETAL, CERTIFICADAS',
+        #                     '01.51-2': 'CRIACAO DE BOVINOS',
+        #                     '01.52-1': 'CRIACAO DE OUTROS ANIMAIS DE GRANDE PORTE',
+        #                     '01.53-9': 'CRIACAO DE CAPRINOS E OVINOS',
+        #                     '01.54-7': 'CRIACAO DE SUINOS',
+        #                     '01.55-5': 'CRIACAO DE AVES',
+        #                     '01.59-8': 'CRIACAO DE ANIMAIS NAO ESPECIFICADOS ANTERIORMENTE',
+        #                     '01.61-0': 'ATIVIDADES DE APOIO A AGRICULTURA',
+        #                     '01.62-8': 'ATIVIDADES DE APOIO A PECUARIA',
+        #                     '01.63-6': 'ATIVIDADES DE POS-COLHEITA',
+        #                     '01.70-9': 'CACA E SERVICOS RELACIONADOS',
+        #                     '02.10-1': 'PRODUCAO FLORESTAL - FLORESTAS PLANTADAS',
+        #                     '02.20-9': 'PRODUCAO FLORESTAL - FLORESTAS NATIVAS',
+        #                     '02.30-6': 'ATIVIDADES DE APOIO A PRODUCAO FLORESTAL',
+        #                     '03.11-6': 'PESCA EM AGUA SALGADA',
+        #                     '03.12-4': 'PESCA EM AGUA DOCE',
+        #                     '03.21-3': 'AQUICULTURA EM AGUA SALGADA E SALOBRA',
+        #                     '03.22-1': 'AQUICULTURA EM AGUA DOCE',
+        #                     '05.00-3': 'EXTRACAO DE CARVAO MINERAL',
+        #                     '06.00-0': 'EXTRACAO DE PETROLEO E GAS NATURAL',
+        #                     '07.10-3': 'EXTRACAO DE MINERIO DE FERRO',
+        #                     '07.21-9': 'EXTRACAO DE MINERIO DE ALUMINIO',
+        #                     '07.22-7': 'EXTRACAO DE MINERIO DE ESTANHO',
+        #                     '07.23-5': 'EXTRACAO DE MINERIO DE MANGANES',
+        #                     '07.24-3': 'EXTRACAO DE MINERIO DE METAIS PRECIOSOS',
+        #                     '07.25-1': 'EXTRACAO DE MINERAIS RADIOATIVOS',
+        #                     '07.29-4': 'EXTRACAO DE MINERAIS METALICOS NAO-FERROSOS NAO ESPECIFICADOS ANTERIORMENTE',
+        #                     '08.10-0': 'EXTRACAO DE PEDRA, AREIA E ARGILA',
+        #                     '08.91-6': 'EXTRACAO DE MINERAIS PARA FABRICACAO DE ADUBOS, FERTILIZANTES E OUTROS PRODUTOS QUIMICOS',
+        #                     '08.92-4': 'EXTRACAO E REFINO DE SAL MARINHO E SAL-GEMA',
+        #                     '08.93-2': 'EXTRACAO DE GEMAS (PEDRAS PRECIOSAS E SEMIPRECIOSAS)',
+        #                     '08.99-1':'EXTRACAO DE MINERAIS NAO-METALICOS NAO ESPECIFICADOS ANTERIORMENTE',
+        #                     '09.10-6': 'ATIVIDADES DE APOIO A EXTRACAO DE PETROLEO E GAS NATURAL',
+        #                     '09.90-4': 'ATIVIDADES DE APOIO A EXTRACAO DE MINERAIS, EXCETO PETROLEO E GAS NATURAL',
+        #                     '10.11-2': 'ABATE DE RESES, EXCETO SUINOS',
+        #                     '10.12-1': 'ABATE DE SUINOS, AVES E OUTROS PEQUENOS ANIMAIS',
+        #                     '10.13-9': 'FABRICACAO DE PRODUTOS DE CARNE',
+        #                     '10.20-1': 'PRESERVACAO DO PESCADO E FABRICACAO DE PRODUTOS DO PESCADO',
+        #                     '10.31-7': 'FABRICACAO DE CONSERVAS DE FRUTAS',
+        #                     '10.32-5': 'FABRICACAO DE CONSERVAS DE LEGUMES E OUTROS VEGETAIS',
+        #                     '10.33-3': 'FABRICACAO DE SUCOS DE FRUTAS, HORTALICAS E LEGUMES',
+        #                     '10.41-4': 'FABRICACAO DE OLEOS VEGETAIS EM BRUTO, EXCETO OLEO DE MILHO',
+        #                     '10.42-2': 'FABRICACAO DE OLEOS VEGETAIS REFINADOS, EXCETO OLEO DE MILHO',
+        #                     '10.43-1': 'FABRICACAO DE MARGARINA E OUTRAS GORDURAS VEGETAIS E DE OLEOS NAO-COMESTIVEIS DE ANIMAIS',
+        #                     '10.51-1': 'PREPARACAO DO LEITE',
+        #                     '10.52-0': 'FABRICACAO DE LATICINIOS',
+        #                     '10.53-8': 'FABRICACAO DE SORVETES E OUTROS GELADOS COMESTIVEIS',
+        #                     '10.61-9': 'BENEFICIAMENTO DE ARROZ E FABRICACAO DE PRODUTOS DO ARROZ',
+        #                     '10.62-7': 'MOAGEM DE TRIGO E FABRICACAO DE DERIVADOS',
+        #                     '10.63-5': 'FABRICACAO DE FARINHA DE MANDIOCA E DERIVADOS',
+        #                     '10.64-3': 'FABRICACAO DE FARINHA DE MILHO E DERIVADOS, EXCETO OLEOS DE MILHO',
+        #                     '10.65-1': 'FABRICACAO DE AMIDOS E FECULAS DE VEGETAIS E DE OLEOS DE MILHO',
+        #                     '10.66-0': 'FABRICACAO DE ALIMENTOS PARA ANIMAIS',
+        #                     '10.69-4': 'MOAGEM E FABRICACAO DE PRODUTOS DE ORIGEM VEGETAL NAO ESPECIFICADOS ANTERIORMENTE',
+        #                     '10.71-6': 'FABRICACAO DE ACUCAR EM BRUTO',
+        #                     '10.72-4': 'FABRICACAO DE ACUCAR REFINADO',
+        #                     '10.81-3': 'TORREFACAO E MOAGEM DE CAFE',
+        #                     '10.82-1': 'FABRICACAO DE PRODUTOS A BASE DE CAFE',
+        #                     '10.91-1': 'FABRICACAO DE PRODUTOS DE PANIFICACAO',
+        #                     '10.92-9': 'FABRICACAO DE BISCOITOS E BOLACHAS',
+        #                     '10.93-7': 'FABRICACAO DE PRODUTOS DERIVADOS DO CACAU, DE CHOCOLATES E CONFEITOS',
+        #                     '10.94-5': 'FABRICACAO DE MASSAS ALIMENTICIAS',
+        #                     '10.95-3': 'FABRICACAO DE ESPECIARIAS, MOLHOS, TEMPEROS E CONDIMENTOS',
+        #                     '10.96-1': 'FABRICACAO DE ALIMENTOS E PRATOS PRONTOS',
+        #                     '10.99-6': 'FABRICACAO DE PRODUTOS ALIMENTICIOS NAO ESPECIFICADOS ANTERIORMENTE',
+        #                     '11.11-9': 'FABRICACAO DE AGUARDENTES E OUTRAS BEBIDAS DESTILADAS',
+        #                     '11.12-7': 'FABRICACAO DE VINHO',
+        #                     '11.13-5': 'FABRICACAO DE MALTE, CERVEJAS E CHOPES',
+        #                     '11.21-6': 'FABRICACAO DE AGUAS ENVASADAS',
+        #                     '11.22-4': 'FABRICACAO DE REFRIGERANTES E DE OUTRAS BEBIDAS NAO-ALCOOLICAS',
+        #                     '12.10-7': 'PROCESSAMENTO INDUSTRIAL DO FUMO',
+        #                     '12.20-4': 'FABRICACAO DE PRODUTOS DO FUMO',
+        #                     '13.11-1': 'PREPARACAO E FIACAO DE FIBRAS DE ALGODAO',
+        #                     '13.12-0': 'PREPARACAO E FIACAO DE FIBRAS TEXTEIS NATURAIS, EXCETO ALGODAO',
+        #                     '13.13-8': 'FIACAO DE FIBRAS ARTIFICIAIS E SINTETICAS',
+        #                     '13.14-6': 'FABRICACAO DE LINHAS PARA COSTURAR E BORDAR',
+        #                     '13.21-9': 'TECELAGEM DE FIOS DE ALGODAO',
+        #                     '13.22-7': 'TECELAGEM DE FIOS DE FIBRAS TEXTEIS NATURAIS, EXCETO ALGODAO',
+        #                     '13.23-5': 'TECELAGEM DE FIOS DE FIBRAS ARTIFICIAIS E SINTETICAS',
+        #                     '13.30-8': 'FABRICACAO DE TECIDOS DE MALHA',
+        #                     '13.40-5': 'ACABAMENTOS EM FIOS, TECIDOS E ARTEFATOS TEXTEIS',
+        #                     '13.51-1': 'FABRICACAO DE ARTEFATOS TEXTEIS PARA USO DOMESTICO',
+        #                     '13.52-9': 'FABRICACAO DE ARTEFATOS DE TAPECARIA',
+        #                     '13.53-7': 'FABRICACAO DE ARTEFATOS DE CORDOARIA',
+        #                     '13.54-5': 'FABRICACAO DE TECIDOS ESPECIAIS, INCLUSIVE ARTEFATOS',
+        #                     '13.59-6': 'FABRICACAO DE OUTROS PRODUTOS TEXTEIS NAO ESPECIFICADOS ANTERIORMENTE',
+        #                     '14.11-8': 'CONFECCAO DE ROUPAS INTIMAS',
+        #                     '14.12-6': 'CONFECCAO DE PECAS DO VESTUARIO, EXCETO ROUPAS INTIMAS',
+        #                     '14.13-4': 'CONFECCAO DE ROUPAS PROFISSIONAIS',
+        #                     '14.14-2': 'FABRICACAO DE ACESSORIOS DO VESTUARIO, EXCETO PARA SEGURANCA E PROTECAO',
+        #                     '14.21-5': 'FABRICACAO DE MEIAS',
+        #                     '14.22-3': 'FABRICACAO DE ARTIGOS DO VESTUARIO, PRODUZIDOS EM MALHARIAS E TRICOTAGENS, EXCETO MEIAS',
+        #                     '15.10-6': 'CURTIMENTO E OUTRAS PREPARACÕES DE COURO',
+        #                     '15.21-1': 'FABRICACAO DE ARTIGOS PARA VIAGEM, BOLSAS E SEMELHANTES DE QUALQUER MATERIAL',
+        #                     '15.29-7': 'FABRICACAO DE ARTEFATOS DE COURO NAO ESPECIFICADOS ANTERIORMENTE',
+        #                     '15.31-9': 'FABRICACAO DE CALCADOS DE COURO',
+        #                     '15.32-7': 'FABRICACAO DE TENIS DE QUALQUER MATERIAL',
+        #                     '15.33-5': 'FABRICACAO DE CALCADOS DE MATERIAL SINTETICO',
+        #                     '15.39-4': 'FABRICACAO DE CALCADOS DE MATERIAIS NAO ESPECIFICADOS ANTERIORMENTE',
+        #                     '15.40-8': 'FABRICACAO DE PARTES PARA CALCADOS, DE QUALQUER MATERIAL',
+        #                     '16.10-2': 'DESDOBRAMENTO DE MADEIRA',
+        #                     '16.21-8': 'FABRICACAO DE MADEIRA LAMINADA E DE CHAPAS DE MADEIRA COMPENSADA, PRENSADA E AGLOMERADA',
+        #                     '16.22-6': 'FABRICACAO DE ESTRUTURAS DE MADEIRA E DE ARTIGOS DE CARPINTARIA PARA',
+        #                     '16.23-4': 'FABRICACAO DE ARTEFATOS DE TANOARIA E DE EMBALAGENS DE MADEIRA',
+        #                     '16.29-3': 'FABRICACAO DE ARTEFATOS DE MADEIRA, PALHA, CORTICA, VIME E MATERIAL TRANCADO NAO ESPECIFICADOS ANTERIORMENTE, EXCETO MOVEIS',
+        #                     '17.10-9': 'FABRICACAO DE CELULOSE E OUTRAS PASTAS PARA A FABRICACAO DE PAPEL',
+        #                     '17.21-4': 'FABRICACAO DE PAPEL',
+        #                     '17.22-2': 'FABRICACAO DE CARTOLINA E PAPEL-CARTAO',
+        #                     '17.31-1': 'FABRICACAO DE EMBALAGENS DE PAPEL',
+        #                     '17.32-0': 'FABRICACAO DE EMBALAGENS DE CARTOLINA E PAPEL-CARTAO',
+        #                     '17.33-8': 'FABRICACAO DE CHAPAS E DE EMBALAGENS DE PAPELAO ONDULADO',
+        #                     '17.41-9': 'FABRICACAO DE PRODUTOS DE PAPEL, CARTOLINA, PAPEL-CARTAO E PAPELAO ONDULADO PARA USO COMERCIAL E DE ESCRITORIO',
+        #                     '17.42-7': 'FABRICACAO DE PRODUTOS DE PAPEL PARA USOS DOMESTICO E HIGIENICO-SANITARIO',
+        #                     '17.49-4': 'FABRICACAO DE PRODUTOS DE PASTAS CELULOSICAS, PAPEL, CARTOLINA, PAPEL-CARTAO E PAPELAO ONDULADO NAO ESPECIFICADOS ANTERIORMENTE',
+        #                     '18.11-3': 'IMPRESSAO DE JORNAIS, LIVROS, REVISTAS E OUTRAS PUBLICACÕES PERIODICAS',
+        #                     '18.12-1': 'IMPRESSAO DE MATERIAL DE SEGURANCA',
+        #                     '18.13-0': 'IMPRESSAO DE MATERIAIS PARA OUTROS USOS',
+        #                     '18.21-1': 'SERVICOS DE PRE-IMPRESSAO',
+        #                     '18.22-9': 'SERVICOS DE ACABAMENTOS GRAFICOS',
+        #                     '18.30-0': 'REPRODUCAO DE MATERIAIS GRAVADOS EM QUALQUER SUPORTE',
+        #                     '19.10-1': 'COQUERIAS',
+        #                     '19.21-7': 'FABRICACAO DE PRODUTOS DO REFINO DE PETROLEO',
+        #                     '19.22-5': 'FABRICACAO DE PRODUTOS DERIVADOS DO PETROLEO, EXCETO PRODUTOS DO REFINO',
+        #                     '19.31-4': 'FABRICACAO DE ALCOOL',
+        #                     '19.32-2': 'FABRICACAO DE BIOCOMBUSTIVEIS, EXCETO ALCOOL',
+        #                     '20.11-8': 'FABRICACAO DE CLORO E ALCALIS',
+        #                     '20.12-6': 'FABRICACAO DE INTERMEDIARIOS PARA FERTILIZANTES',
+        #                     '20.13-4': 'FABRICACAO DE ADUBOS E FERTILIZANTES',
+        #                     '20.14-2': 'FABRICACAO DE GASES INDUSTRIAIS',
+        #                     '20.19-3': 'FABRICACAO DE PRODUTOS QUIMICOS INORGÂNICOS NAO ESPECIFICADOS ANTERIORMENTE',
+        #                     '20.21-5': 'FABRICACAO DE PRODUTOS PETROQUIMICOS BASICOS',
+        #                     '20.22-3': 'FABRICACAO DE INTERMEDIARIOS PARA PLASTIFICANTES, RESINAS E FIBRAS',
+        #                     '20.29-1': 'FABRICACAO DE PRODUTOS QUIMICOS ORGÂNICOS NAO ESPECIFICADOS ANTERIORMENTE',
+        #                     '20.31-2': 'FABRICACAO DE RESINAS TERMOPLASTICAS',
+        #                     '20.32-1': 'FABRICACAO DE RESINAS TERMOFIXAS',
+        #                     '20.33-9': 'FABRICACAO DE ELASTOMEROS',
+        #                     '20.40-1': 'FABRICACAO DE FIBRAS ARTIFICIAIS E SINTETICAS',
+        #                     '20.51-7': 'FABRICACAO DE DEFENSIVOS AGRICOLAS',
+        #                     '20.52-5': 'FABRICACAO DE DESINFESTANTES DOMISSANITARIOS',
+        #                     '20.61-4': 'FABRICACAO DE SABÕES E DETERGENTES SINTETICOS',
+        #                     '20.62-2': 'FABRICACAO DE PRODUTOS DE LIMPEZA E POLIMENTO',
+        #                     '20.63-1': 'FABRICACAO DE COSMETICOS, PRODUTOS DE PERFUMARIA E DE HIGIENE PESSOAL',
+        #                     '20.71-1': 'FABRICACAO DE TINTAS, VERNIZES, ESMALTES E LACAS',
+        #                     '20.72-0': 'FABRICACAO DE TINTAS DE IMPRESSAO',
+        #                     '20.73-8': 'FABRICACAO DE IMPERMEABILIZANTES, SOLVENTES E PRODUTOS AFINS',
+        #                     '20.91-6': 'FABRICACAO DE ADESIVOS E SELANTES',
+        #                     '20.92-4': 'FABRICACAO DE EXPLOSIVOS',
+        #                     '20.93-2': 'FABRICACAO DE ADITIVOS DE USO INDUSTRIAL',
+        #                     '20.94-1': 'FABRICACAO DE CATALISADORES',
+        #                     '20.99-1': 'FABRICACAO DE PRODUTOS QUIMICOS NAO ESPECIFICADOS ANTERIORMENTE',
+        #                     '21.10-6': 'FABRICACAO DE PRODUTOS FARMOQUIMICOS',
+        #                     '21.21-1': 'FABRICACAO DE MEDICAMENTOS PARA USO HUMANO',
+        #                     '21.22-0': 'FABRICACAO DE MEDICAMENTOS PARA USO VETERINARIO',
+        #                     '21.23-8': 'FABRICACAO DE PREPARACÕES FARMACEUTICAS',
+        #                     '22.11-1': 'FABRICACAO DE PNEUMATICOS E DE CÂMARAS-DE-AR',
+        #                     '22.12-9': 'REFORMA DE PNEUMATICOS USADOS',
+        #                     '22.19-6': 'FABRICACAO DE ARTEFATOS DE BORRACHA NAO ESPECIFICADOS ANTERIORMENTE',
+        #                     '22.21-8': 'FABRICACAO DE LAMINADOS PLANOS E TUBULARES DE MATERIAL PLASTICO',
+        #                     '22.22-6': 'FABRICACAO DE EMBALAGENS DE MATERIAL PLASTICO',
+        #                     '22.23-4': 'FABRICACAO DE TUBOS E ACESSORIOS DE MATERIAL PLASTICO PARA USO NA CONSTRUCAO',
+        #                     '22.29-3': 'FABRICACAO DE ARTEFATOS DE MATERIAL PLASTICO NAO ESPECIFICADOS ANTERIORMENTE',
+        #                     '23.11-7': 'FABRICACAO DE VIDRO PLANO E DE SEGURANCA',
+        #                     '23.12-5': 'FABRICACAO DE EMBALAGENS DE VIDRO',
+        #                     '23.19-2': 'FABRICACAO DE ARTIGOS DE VIDRO',
+        #                     '23.20-6': 'FABRICACAO DE CIMENTO',
+        #                     '23.30-3': 'FABRICACAO DE ARTEFATOS DE CONCRETO, CIMENTO, FIBROCIMENTO, GESSO E MATERIAIS SEMELHANTES',
+        #                     '23.41-9': 'FABRICACAO DE PRODUTOS CERÂMICOS REFRATARIOS',
+        #                     '23.42-7': 'FABRICACAO DE PRODUTOS CERÂMICOS NAO-REFRATARIOS PARA USO ESTRUTURAL NA CONSTRUCAO',
+        #                     '23.49-4': 'FABRICACAO DE PRODUTOS CERÂMICOS NAO-REFRATARIOS NAO ESPECIFICADOS ANTERIORMENTE',
+        #                     '23.91-5': 'APARELHAMENTO E OUTROS TRABALHOS EM PEDRAS',
+        #                     '23.92-3': 'FABRICACAO DE CAL E GESSO',
+        #                     '23.99-1': 'FABRICACAO DE PRODUTOS DE MINERAIS NAO-METALICOS NAO ESPECIFICADOS ANTERIORMENTE',
+        #                     '24.11-3': 'PRODUCAO DE FERRO-GUSA',
+        #                     '24.12-1': 'PRODUCAO DE FERROLIGAS',
+        #                     '24.21-1': 'PRODUCAO DE SEMI-ACABADOS DE ACO',
+        #                     '24.22-9': 'PRODUCAO DE LAMINADOS PLANOS DE ACO',
+        #                     '24.23-7': 'PRODUCAO DE LAMINADOS LONGOS DE ACO',
+        #                     '24.24-5': 'PRODUCAO DE RELAMINADOS, TREFILADOS E PERFILADOS DE ACO',
+        #                     '24.31-8': 'PRODUCAO DE TUBOS DE ACO COM COSTURA',
+        #                     '24.39-3': 'PRODUCAO DE OUTROS TUBOS DE FERRO E ACO',
+        #                     '24.41-5': 'METALURGIA DO ALUMINIO E SUAS LIGAS',
+        #                     '24.42-3': 'METALURGIA DOS METAIS PRECIOSOS',
+        #                     '24.43-1': 'METALURGIA DO COBRE',
+        #                     '24.49-1': 'METALURGIA DOS METAIS NAO-FERROSOS E SUAS LIGAS NAO ESPECIFICADOS ANTERIORMENTE',
+        #                     '24.51-2': 'FUNDICAO DE FERRO E ACO',
+        #                     '24.52-1': 'FUNDICAO DE METAIS NAO-FERROSOS E SUAS LIGAS',
+        #                     '25.11-0': 'FABRICACAO DE ESTRUTURAS METALICAS',
+        #                     '25.12-8': 'FABRICACAO DE ESQUADRIAS DE METAL',
+        #                     '25.13-6': 'FABRICACAO DE OBRAS DE CALDEIRARIA PESADA',
+        #                     '25.21-7': 'FABRICACAO DE TANQUES, RESERVATORIOS METALICOS E CALDEIRAS PARA AQUECIMENTO CENTRAL',
+        #                     '25.22-5': 'FABRICACAO DE CALDEIRAS GERADORAS DE VAPOR, EXCETO PARA AQUECIMENTO CENTRAL E PARA VEICULOS',
+        #                     '25.31-4': 'PRODUCAO DE FORJADOS DE ACO E DE METAIS NAO-FERROSOS E SUAS LIGAS',
+        #                     '25.32-2': 'PRODUCAO DE ARTEFATOS ESTAMPADOS DE METAL; METALURGIA DO PO',
+        #                     '25.39-0': 'SERVICOS DE USINAGEM, SOLDA, TRATAMENTO E REVESTIMENTO EM METAIS',
+        #                     '25.41-1': 'FABRICACAO DE ARTIGOS DE CUTELARIA',
+        #                     '25.42-0': 'FABRICACAO DE ARTIGOS DE SERRALHERIA, EXCETO ESQUADRIAS',
+        #                     '25.43-8': 'FABRICACAO DE FERRAMENTAS',
+        #                     '25.50-1': 'FABRICACAO DE EQUIPAMENTO BELICO PESADO, ARMAS DE FOGO E MUNICÕES',
+        #                     '25.91-8': 'FABRICACAO DE EMBALAGENS METALICAS',
+        #                     '25.92-6': 'FABRICACAO DE PRODUTOS DE TREFILADOS DE METAL',
+        #                     '25.93-4': 'FABRICACAO DE ARTIGOS DE METAL PARA USO DOMESTICO E PESSOAL',
+        #                     '25.99-3': 'FABRICACAO DE PRODUTOS DE METAL NAO ESPECIFICADOS ANTERIORMENTE',
+        #                     '26.10-8': 'FABRICACAO DE COMPONENTES ELETRONICOS',
+        #                     '26.21-3': 'FABRICACAO DE EQUIPAMENTOS DE INFORMATICA',
+        #                     '26.22-1': 'FABRICACAO DE PERIFERICOS PARA EQUIPAMENTOS DE INFORMATICA',
+        #                     '26.31-1': 'FABRICACAO DE EQUIPAMENTOS TRANSMISSORES DE COMUNICACAO',
+        #                     '26.32-9': 'FABRICACAO DE APARELHOS TELEFONICOS E DE OUTROS EQUIPAMENTOS DE COMUNICACAO',
+        #                     '26.40-0': 'FABRICACAO DE APARELHOS DE RECEPCAO, REPRODUCAO, GRAVACAO E AMPLIFICACAO DE AUDIO E VIDEO',
+        #                     '26.51-5': 'FABRICACAO DE APARELHOS E EQUIPAMENTOS DE MEDIDA, TESTE E CONTROLE',
+        #                     '26.52-3': 'FABRICACAO DE CRONOMETROS E RELOGIOS',
+        #                     '26.60-4': 'FABRICACAO DE APARELHOS ELETROMEDICOS E ELETROTERAPEUTICOS E EQUIPAMENTOS DE IRRADIACAO',
+        #                     '26.70-1': 'FABRICACAO DE EQUIPAMENTOS E INSTRUMENTOS OPTICOS, FOTOGRAFICOS E CINEMATOGRAFICOS',
+        #                     '26.80-9': 'FABRICACAO DE MIDIAS VIRGENS, MAGNETICAS E OPTICAS',
+        #                     '27.10-4': 'FABRICACAO DE GERADORES, TRANSFORMADORES E MOTORES ELETRICOS',
+        #                     '27.21-0': 'FABRICACAO DE PILHAS, BATERIAS E ACUMULADORES ELETRICOS, EXCETO PARA VEICULOS AUTOMOTORES',
+        #                     '27.22-8': 'FABRICACAO DE BATERIAS E ACUMULADORES PARA VEICULOS AUTOMOTORES',
+        #                     '27.31-7': 'FABRICACAO DE APARELHOS E EQUIPAMENTOS PARA DISTRIBUICAO E CONTROLE DE ENERGIA ELETRICA',
+        #                     '27.32-5': 'FABRICACAO DE MATERIAL ELETRICO PARA INSTALACÕES EM CIRCUITO DE CONSUMO',
+        #                     '27.33-3': 'FABRICACAO DE FIOS, CABOS E CONDUTORES ELETRICOS ISOLADOS',
+        #                     '27.40-6': 'FABRICACAO DE LÂMPADAS E OUTROS EQUIPAMENTOS DE ILUMINACAO',
+        #                     '27.51-1': 'FABRICACAO DE FOGÕES, REFRIGERADORES E MAQUINAS DE LAVAR E SECAR PARA USO DOMESTICO',
+        #                     '27.59-7': 'FABRICACAO DE APARELHOS ELETRODOMESTICOS NAO ESPECIFICADOS ANTERIORMENTE',
+        #                     '27.90-2': 'FABRICACAO DE EQUIPAMENTOS E APARELHOS ELETRICOS NAO ESPECIFICADOS ANTERIORMENTE',
+        #                     '28.11-9': 'FABRICACAO DE MOTORES E TURBINAS, EXCETO PARA AVIÕES E VEICULOS RODOVIARIOS',
+        #                     '28.12-7': 'FABRICACAO DE EQUIPAMENTOS HIDRAULICOS E PNEUMATICOS, EXCETO VALVULAS',
+        #                     '28.13-5': 'FABRICACAO DE VALVULAS, REGISTROS E DISPOSITIVOS SEMELHANTES',
+        #                     '28.14-3': 'FABRICACAO DE COMPRESSORES',
+        #                     '28.15-1': 'FABRICACAO DE EQUIPAMENTOS DE TRANSMISSAO PARA FINS INDUSTRIAIS',
+        #                     '28.21-6': 'FABRICACAO DE APARELHOS E EQUIPAMENTOS PARA INSTALACÕES TERMICAS',
+        #                     '28.22-4': 'FABRICACAO DE MAQUINAS, EQUIPAMENTOS E APARELHOS PARA TRANSPORTE E ELEVACAO DE CARGAS E PESSOAS',
+        #                     '28.23-2': 'FABRICACAO DE MAQUINAS E APARELHOS DE REFRIGERACAO E VENTILACAO PARA USO INDUSTRIAL E COMERCIAL',
+        #                     '28.24-1': 'FABRICACAO DE APARELHOS E EQUIPAMENTOS DE AR CONDICIONADO',
+        #                     '28.25-9': 'FABRICACAO DE MAQUINAS E EQUIPAMENTOS PARA SANEAMENTO BASICO E AMBIENTAL',
+        #                     '28.29-1': 'FABRICACAO DE MAQUINAS E EQUIPAMENTOS DE USO GERAL NAO ESPECIFICADOS ANTERIORMENTE',
+        #                     '28.31-3': 'FABRICACAO DE TRATORES AGRICOLAS',
+        #                     '28.32-1': 'FABRICACAO DE EQUIPAMENTOS PARA IRRIGACAO AGRICOLA',
+        #                     '28.33-0': 'FABRICACAO DE MAQUINAS E EQUIPAMENTOS PARA A AGRICULTURA E PECUARIA, EXCETO PARA IRRIGACAO',
+        #                     '28.40-2': 'FABRICACAO DE MAQUINAS-FERRAMENTA',
+        #                     '28.51-8': 'FABRICACAO DE MAQUINAS E EQUIPAMENTOS PARA A PROSPECCAO E EXTRACAO DE PETROLEO',
+        #                     '28.52-6': 'FABRICACAO DE OUTRAS MAQUINAS E EQUIPAMENTOS PARA USO NA EXTRACAO MINERAL, EXCETO NA EXTRACAO DE PETROLEO',
+        #                     '28.53-4': 'FABRICACAO DE TRATORES, EXCETO AGRICOLAS',
+        #                     '28.54-2': 'FABRICACAO DE MAQUINAS E EQUIPAMENTOS PARA TERRAPLENAGEM, PAVIMENTACAO E CONSTRUCAO, EXCETO TRATORES',
+        #                     '28.61-5': 'FABRICACAO DE MAQUINAS PARA A INDUSTRIA METALURGICA, EXCETO MAQUINAS-FERRAMENTA',
+        #                     '28.62-3': 'FABRICACAO DE MAQUINAS E EQUIPAMENTOS PARA AS INDUSTRIAS DE ALIMENTOS, BEBIDAS E FUMO',
+        #                     '28.63-1': 'FABRICACAO DE MAQUINAS E EQUIPAMENTOS PARA A INDUSTRIA TEXTIL',
+        #                     '28.64-0': 'FABRICACAO DE MAQUINAS E EQUIPAMENTOS PARA AS INDUSTRIAS DO VESTUARIO, DO COURO E DE CALCADOS',
+        #                     '28.65-8': 'FABRICACAO DE MAQUINAS E EQUIPAMENTOS PARA AS INDUSTRIAS DE CELULOSE, PAPEL E PAPELAO E ARTEFATOS',
+        #                     '28.66-6': 'FABRICACAO DE MAQUINAS E EQUIPAMENTOS PARA A INDUSTRIA DO PLASTICO',
+        #                     '28.69-1': 'FABRICACAO DE MAQUINAS E EQUIPAMENTOS PARA USO INDUSTRIAL ESPECIFICO NAO ESPECIFICADOS ANTERIORMENTE',
+        #                     '29.10-7': 'FABRICACAO DE AUTOMOVEIS, CAMIONETAS E UTILITARIOS',
+        #                     '29.20-4': 'FABRICACAO DE CAMINHÕES E ONIBUS',
+        #                     '29.30-1': 'FABRICACAO DE CABINES, CARROCERIAS E REBOQUES PARA VEICULOS AUTOMOTORES',
+        #                     '29.41-7': 'FABRICACAO DE PECAS E ACESSORIOS PARA O SISTEMA MOTOR DE VEICULOS AUTOMOTORES',
+        #                     '29.42-5': 'FABRICACAO DE PECAS E ACESSORIOS PARA OS SISTEMAS DE MARCHA E TRANSMISSAO DE VEICULOS AUTOMOTORES',
+        #                     '29.43-3': 'FABRICACAO DE PECAS E ACESSORIOS PARA O SISTEMA DE FREIOS DE VEICULOS AUTOMOTORES',
+        #                     '29.44-1': 'FABRICACAO DE PECAS E ACESSORIOS PARA O SISTEMA DE DIRECAO E SUSPENSAO DE VEICULOS AUTOMOTORES',
+        #                     '29.45-0': 'FABRICACAO DE MATERIAL ELETRICO E ELETRONICO PARA VEICULOS AUTOMOTORES, EXCETO BATERIAS',
+        #                     '29.49-2': 'FABRICACAO DE PECAS E ACESSORIOS PARA VEICULOS AUTOMOTORES NAO ESPECIFICADOS ANTERIORMENTE',
+        #                     '29.50-6': 'RECONDICIONAMENTO E RECUPERACAO DE MOTORES PARA VEICULOS AUTOMOTORES',
+        #                     '30.11-3': 'CONSTRUCAO DE EMBARCACÕES E ESTRUTURAS FLUTUANTES',
+        #                     '30.12-1': 'CONSTRUCAO DE EMBARCACÕES PARA ESPORTE E LAZER',
+        #                     '30.31-8': 'FABRICACAO DE LOCOMOTIVAS, VAGÕES E OUTROS MATERIAIS RODANTES',
+        #                     '30.32-6': 'FABRICACAO DE PECAS E ACESSORIOS PARA VEICULOS FERROVIARIOS',
+        #                     '30.41-5': 'FABRICACAO DE AERONAVES',
+        #                     '30.42-3': 'FABRICACAO DE TURBINAS, MOTORES E OUTROS COMPONENTES E PECAS PARA AERONAVES',
+        #                     '30.50-4': 'FABRICACAO DE VEICULOS MILITARES DE COMBATE',
+        #                     '30.91-1': 'FABRICACAO DE MOTOCICLETAS',
+        #                     '30.92-0': 'FABRICACAO DE BICICLETAS E TRICICLOS NAO-MOTORIZADOS',
+        #                     '30.99-7': 'FABRICACAO DE EQUIPAMENTOS DE TRANSPORTE NAO ESPECIFICADOS ANTERIORMENTE',
+        #                     '31.01-2': 'FABRICACAO DE MOVEIS COM PREDOMINÂNCIA DE MADEIRA',
+        #                     '31.02-1': 'FABRICACAO DE MOVEIS COM PREDOMINÂNCIA DE METAL',
+        #                     '31.03-9': 'FABRICACAO DE MOVEIS DE OUTROS MATERIAIS, EXCETO MADEIRA E METAL',
+        #                     '31.04-7': 'FABRICACAO DE COLCHÕES',
+        #                     '32.11-6': 'LAPIDACAO DE GEMAS E FABRICACAO DE ARTEFATOS DE OURIVESARIA E JOALHERIA',
+        #                     '32.12-4': 'FABRICACAO DE BIJUTERIAS E ARTEFATOS SEMELHANTES',
+        #                     '32.20-5': 'FABRICACAO DE INSTRUMENTOS MUSICAIS',
+        #                     '32.30-2': 'FABRICACAO DE ARTEFATOS PARA PESCA E ESPORTE',
+        #                     '32.40-0': 'FABRICACAO DE BRINQUEDOS E JOGOS RECREATIVOS',
+        #                     '32.50-7': 'FABRICACAO DE INSTRUMENTOS E MATERIAIS PARA USO MEDICO E ODONTOLOGICO E DE ARTIGOS OPTICOS',
+        #                     '32.91-4': 'FABRICACAO DE ESCOVAS, PINCEIS E VASSOURAS',
+        #                     '32.92-2': 'FABRICACAO DE EQUIPAMENTOS E ACESSORIOS PARA SEGURANCA E PROTECAO PESSOAL E PROFISSIONAL',
+        #                     '32.99-0': 'FABRICACAO DE PRODUTOS DIVERSOS NAO ESPECIFICADOS ANTERIORMENTE',
+        #                     '33.11-2': 'MANUTENCAO E REPARACAO DE TANQUES, RESERVATORIOS METALICOS E CALDEIRAS, EXCETO PARA VEICULOS',
+        #                     '33.12-1': 'MANUTENCAO E REPARACAO DE EQUIPAMENTOS ELETRONICOS E OPTICOS',
+        #                     '33.13-9': 'MANUTENCAO E REPARACAO DE MAQUINAS E EQUIPAMENTOS ELETRICOS',
+        #                     '33.14-7': 'MANUTENCAO E REPARACAO DE MAQUINAS E EQUIPAMENTOS DA INDUSTRIA MECÂNICA',
+        #                     '33.15-5': 'MANUTENCAO E REPARACAO DE VEICULOS FERROVIARIOS',
+        #                     '33.16-3': 'MANUTENCAO E REPARACAO DE AERONAVES',
+        #                     '33.17-1': 'MANUTENCAO E REPARACAO DE EMBARCACÕES',
+        #                     '33.19-8': 'MANUTENCAO E REPARACAO DE EQUIPAMENTOS E PRODUTOS NAO ESPECIFICADOS ANTERIORMENTE',
+        #                     '33.21-0': 'INSTALACAO DE MAQUINAS E EQUIPAMENTOS INDUSTRIAIS',
+        #                     '33.29-5': 'INSTALACAO DE EQUIPAMENTOS NAO ESPECIFICADOS ANTERIORMENTE',
+        #                     '35.11-5': 'GERACAO DE ENERGIA ELETRICA',
+        #                     '35.12-3': 'TRANSMISSAO DE ENERGIA ELETRICA',
+        #                     '35.13-1': 'COMERCIO ATACADISTA DE ENERGIA ELETRICA',
+        #                     '35.14-0': 'DISTRIBUICAO DE ENERGIA ELETRICA',
+        #                     '35.20-4': 'PRODUCAO DE GAS; PROCESSAMENTO DE GAS NATURAL; DISTRIBUICAO DE COMBUSTIVEIS GASOSOS POR REDES URBANAS',
+        #                     '35.30-1': 'PRODUCAO E DISTRIBUICAO DE VAPOR, AGUA QUENTE E AR CONDICIONADO',
+        #                     '36.00-6': 'CAPTACAO, TRATAMENTO E DISTRIBUICAO DE AGUA',
+        #                     '37.01-1': 'GESTAO DE REDES DE ESGOTO',
+        #                     '37.02-9': 'ATIVIDADES RELACIONADAS A ESGOTO, EXCETO A GESTAO DE REDES',
+        #                     '38.11-4': 'COLETA DE RESIDUOS NAO-PERIGOSOS',
+        #                     '38.12-2': 'COLETA DE RESIDUOS PERIGOSOS',
+        #                     '38.21-1': 'TRATAMENTO E DISPOSICAO DE RESIDUOS NAO-PERIGOSOS',
+        #                     '38.22-0': 'TRATAMENTO E DISPOSICAO DE RESIDUOS PERIGOSOS',
+        #                     '38.31-9': 'RECUPERACAO DE MATERIAIS METALICOS',
+        #                     '38.32-7': 'RECUPERACAO DE MATERIAIS PLASTICOS',
+        #                     '38.39-4': 'RECUPERACAO DE MATERIAIS NAO ESPECIFICADOS ANTERIORMENTE',
+        #                     '39.00-5': 'DESCONTAMINACAO E OUTROS SERVICOS DE GESTAO DE RESIDUOS',
+        #                     '41.10-7': 'INCORPORACAO DE EMPREENDIMENTOS IMOBILIARIOS',
+        #                     '41.20-4': 'CONSTRUCAO DE EDIFICIOS',
+        #                     '42.11-1': 'CONSTRUCAO DE RODOVIAS E FERROVIAS',
+        #                     '42.12-0': 'CONSTRUCAO DE OBRAS-DE-ARTE ESPECIAIS',
+        #                     '42.13-8': 'OBRAS DE URBANIZACAO - RUAS, PRACAS E CALCADAS',
+        #                     '42.21-9': 'OBRAS PARA GERACAO E DISTRIBUICAO DE ENERGIA ELETRICA E PARA TELECOMUNICACÕES',
+        #                     '42.22-7': 'CONSTRUCAO DE REDES DE ABASTECIMENTO DE AGUA, COLETA DE ESGOTO E CONSTRUCÕES CORRELATAS',
+        #                     '42.23-5': 'CONSTRUCAO DE REDES DE TRANSPORTES POR DUTOS, EXCETO PARA AGUA E ESGOTO',
+        #                     '42.91-0': 'OBRAS PORTUARIAS, MARITIMAS E FLUVIAIS',
+        #                     '42.92-8': 'MONTAGEM DE INSTALACÕES INDUSTRIAIS E DE ESTRUTURAS METALICAS',
+        #                     '42.99-5': 'OBRAS DE ENGENHARIA CIVIL NAO ESPECIFICADAS ANTERIORMENTE',
+        #                     '43.11-8': 'DEMOLICAO E PREPARACAO DE CANTEIROS DE OBRAS',
+        #                     '43.12-6': 'PERFURACÕES E SONDAGENS',
+        #                     '43.13-4': 'OBRAS DE TERRAPLENAGEM',
+        #                     '43.19-3': 'SERVICOS DE PREPARACAO DO TERRENO NAO ESPECIFICADOS ANTERIORMENTE',
+        #                     '43.21-5': 'INSTALACÕES ELETRICAS',
+        #                     '43.22-3': 'INSTALACÕES HIDRAULICAS, DE SISTEMAS DE VENTILACAO E REFRIGERACAO',
+        #                     '43.29-1': 'OBRAS DE INSTALACÕES EM CONSTRUCÕES NAO ESPECIFICADAS ANTERIORMENTE',
+        #                     '43.30-4': 'OBRAS DE ACABAMENTO',
+        #                     '43.91-6': 'OBRAS DE FUNDACÕES',
+        #                     '43.99-1': 'SERVICOS ESPECIALIZADOS PARA CONSTRUCAO NAO ESPECIFICADOS ANTERIORMENTE',
+        #                     '45.11-1': 'COMERCIO A VAREJO E POR ATACADO DE VEICULOS AUTOMOTORES',
+        #                     '45.12-9': 'REPRESENTANTES COMERCIAIS E AGENTES DO COMERCIO DE VEICULOS AUTOMOTORES',
+        #                     '45.20-0': 'MANUTENCAO E REPARACAO DE VEICULOS AUTOMOTORES',
+        #                     '45.30-7': 'COMERCIO DE PECAS E ACESSORIOS PARA VEICULOS AUTOMOTORES',
+        #                     '45.41-2': 'COMERCIO POR ATACADO E A VAREJO DE MOTOCICLETAS, PECAS E ACESSORIOS',
+        #                     '45.42-1': 'REPRESENTANTES COMERCIAIS E AGENTES DO COMERCIO DE MOTOCICLETAS, PECAS E ACESSORIOS',
+        #                     '45.43-9': 'MANUTENCAO E REPARACAO DE MOTOCICLETAS',
+        #                     '46.11-7': 'REPRESENTANTES COMERCIAIS E AGENTES DO COMERCIO DE MATERIAS-PRIMAS AGRICOLAS E ANIMAIS VIVOS',
+        #                     '46.12-5': 'REPRESENTANTES COMERCIAIS E AGENTES DO COMERCIO DE COMBUSTIVEIS, MINERAIS, PRODUTOS SIDERURGICOS E QUIMICOS',
+        #                     '46.13-3': 'REPRESENTANTES COMERCIAIS E AGENTES DO COMERCIO DE MADEIRA, MATERIAL DE CONSTRUCAO E FERRAGENS',
+        #                     '46.14-1': 'REPRESENTANTES COMERCIAIS E AGENTES DO COMERCIO DE MAQUINAS, EQUIPAMENTOS, EMBARCACÕES E AERONAVES',
+        #                     '46.15-0': 'REPRESENTANTES COMERCIAIS E AGENTES DO COMERCIO DE ELETRODOMESTICOS, MOVEIS E ARTIGOS DE USO DOMESTICO',
+        #                     '46.16-8': 'REPRESENTANTES COMERCIAIS E AGENTES DO COMERCIO DE TEXTEIS, VESTUARIO, CALCADOS E ARTIGOS DE VIAGEM',
+        #                     '46.17-6': 'REPRESENTANTES COMERCIAIS E AGENTES DO COMERCIO DE PRODUTOS ALIMENTICIOS, BEBIDAS E FUMO',
+        #                     '46.18-4': 'REPRESENTANTES COMERCIAIS E AGENTES DO COMERCIO ESPECIALIZADO EM PRODUTOS NAO ESPECIFICADOS ANTERIORMENTE',
+        #                     '46.19-2': 'REPRESENTANTES COMERCIAIS E AGENTES DO COMERCIO DE MERCADORIAS EM GERAL NAO ESPECIALIZADO',
+        #                     '46.21-4': 'COMERCIO ATACADISTA DE CAFE EM GRAO',
+        #                     '46.22-2': 'COMERCIO ATACADISTA DE SOJA',
+        #                     '46.23-1': 'COMERCIO ATACADISTA DE ANIMAIS VIVOS, ALIMENTOS PARA ANIMAIS E MATERIAS-PRIMAS AGRICOLAS, EXCETO CAFE E SOJA',
+        #                     '46.31-1': 'COMERCIO ATACADISTA DE LEITE E LATICINIOS',
+        #                     '46.32-0': 'COMERCIO ATACADISTA DE CEREAIS E LEGUMINOSAS BENEFICIADOS, FARINHAS, AMIDOS E FECULAS',
+        #                     '46.33-8': 'COMERCIO ATACADISTA DE HORTIFRUTIGRANJEIROS',
+        #                     '46.34-6': 'COMERCIO ATACADISTA DE CARNES, PRODUTOS DA CARNE E PESCADO',
+        #                     '46.35-4': 'COMERCIO ATACADISTA DE BEBIDAS',
+        #                     '46.36-2': 'COMERCIO ATACADISTA DE PRODUTOS DO FUMO',
+        #                     '46.37-1': 'COMERCIO ATACADISTA ESPECIALIZADO EM PRODUTOS ALIMENTICIOS NAO ESPECIFICADOS ANTERIORMENTE',
+        #                     '46.39-7': 'COMERCIO ATACADISTA DE PRODUTOS ALIMENTICIOS EM GERAL',
+        #                     '46.41-9': 'COMERCIO ATACADISTA DE TECIDOS, ARTEFATOS DE TECIDOS E DE ARMARINHO',
+        #                     '46.42-7': 'COMERCIO ATACADISTA DE ARTIGOS DO VESTUARIO E ACESSORIOS',
+        #                     '46.43-5': 'COMERCIO ATACADISTA DE CALCADOS E ARTIGOS DE VIAGEM',
+        #                     '46.44-3': 'COMERCIO ATACADISTA DE PRODUTOS FARMACEUTICOS PARA USO HUMANO E VETERINARIO',
+        #                     '46.45-1': 'COMERCIO ATACADISTA DE INSTRUMENTOS E MATERIAIS PARA USO MEDICO, CIRURGICO, ORTOPEDICO E ODONTOLOGICO',
+        #                     '46.46-0': 'COMERCIO ATACADISTA DE COSMETICOS, PRODUTOS DE PERFUMARIA E DE HIGIENE PESSOAL',
+        #                     '46.47-8': 'COMERCIO ATACADISTA DE ARTIGOS DE ESCRITORIO E DE PAPELARIA; LIVROS, JORNAIS E OUTRAS PUBLICACÕES',
+        #                     '46.49-4': 'COMERCIO ATACADISTA DE EQUIPAMENTOS E ARTIGOS DE USO PESSOAL E DOMESTICO NAO ESPECIFICADOS ANTERIORMENTE',
+        #                     '46.51-6': 'COMERCIO ATACADISTA DE COMPUTADORES, PERIFERICOS E SUPRIMENTOS DE INFORMATICA',
+        #                     '46.52-4': 'COMERCIO ATACADISTA DE COMPONENTES ELETRONICOS E EQUIPAMENTOS DE TELEFONIA E COMUNICACAO',
+        #                     '46.61-3': 'COMERCIO ATACADISTA DE MAQUINAS, APARELHOS E EQUIPAMENTOS PARA USO AGROPECUARIO; PARTES E PECAS',
+        #                     '46.62-1': 'COMERCIO ATACADISTA DE MAQUINAS, EQUIPAMENTOS PARA TERRAPLENAGEM, MINERACAO E CONSTRUCAO; PARTES E PECAS',
+        #                     '46.63-0': 'COMERCIO ATACADISTA DE MAQUINAS E EQUIPAMENTOS PARA USO INDUSTRIAL; PARTES E PECAS',
+        #                     '46.64-8': 'COMERCIO ATACADISTA DE MAQUINAS, APARELHOS E EQUIPAMENTOS PARA USO ODONTO-MEDICO-HOSPITALAR; PARTES E PECAS',
+        #                     '46.65-6': 'COMERCIO ATACADISTA DE MAQUINAS E EQUIPAMENTOS PARA USO COMERCIAL; PARTES E PECAS',
+        #                     '46.69-9': 'COMERCIO ATACADISTA DE MAQUINAS, APARELHOS E EQUIPAMENTOS NAO ESPECIFICADOS ANTERIORMENTE; PARTES E PECAS',
+        #                     '46.71-1': 'COMERCIO ATACADISTA DE MADEIRA E PRODUTOS DERIVADOS',
+        #                     '46.72-9': 'COMERCIO ATACADISTA DE FERRAGENS E FERRAMENTAS',
+        #                     '46.73-7': 'COMERCIO ATACADISTA DE MATERIAL ELETRICO',
+        #                     '46.74-5': 'COMERCIO ATACADISTA DE CIMENTO',
+        #                     '46.79-6': 'COMERCIO ATACADISTA ESPECIALIZADO DE MATERIAIS DE CONSTRUCAO NAO ESPECIFICADOS ANTERIORMENTE E DE MATERIAIS DE CONSTRUCAO EM GERAL',
+        #                     '46.81-8': 'COMERCIO ATACADISTA DE COMBUSTIVEIS SOLIDOS, LIQUIDOS E GASOSOS, EXCETO GAS NATURAL E GLP',
+        #                     '46.82-6': 'COMERCIO ATACADISTA DE GAS LIQUEFEITO DE PETROLEO (GLP)',
+        #                     '46.83-4':'COMERCIO ATACADISTA DE DEFENSIVOS AGRICOLAS, ADUBOS, FERTILIZANTES E CORRETIVOS DO SOLO',
+        #                     '46.84-2': 'COMERCIO ATACADISTA DE PRODUTOS QUIMICOS E PETROQUIMICOS, EXCETO AGROQUIMICOS',
+        #                     '46.85-1': 'COMERCIO ATACADISTA DE PRODUTOS SIDERURGICOS E METALURGICOS, EXCETO PARA CONSTRUCAO',
+        #                     '46.86-9': 'COMERCIO ATACADISTA DE PAPEL E PAPELAO EM BRUTO E DE EMBALAGENS',
+        #                     '46.87-7': 'COMERCIO ATACADISTA DE RESIDUOS E SUCATAS',
+        #                     '46.89-3': 'COMERCIO ATACADISTA ESPECIALIZADO DE OUTROS PRODUTOS INTERMEDIARIOS NAO ESPECIFICADOS ANTERIORMENTE',
+        #                     '46.91-5': 'COMERCIO ATACADISTA DE MERCADORIAS EM GERAL, COM PREDOMINÂNCIA DE PRODUTOS ALIMENTICIOS',
+        #                     '46.92-3': 'COMERCIO ATACADISTA DE MERCADORIAS EM GERAL, COM PREDOMINÂNCIA DE INSUMOS AGROPECUARIOS',
+        #                     '46.93-1': 'COMERCIO ATACADISTA DE MERCADORIAS EM GERAL, SEM PREDOMINÂNCIA DE ALIMENTOS OU DE INSUMOS AGROPECUARIOS',
+        #                     '47.11-3': 'COMERCIO VAREJISTA DE MERCADORIAS EM GERAL, COM PREDOMINÂNCIA DE PRODUTOS ALIMENTICIOS - HIPERMERCADOS E SUPERMERCADOS',
+        #                     '47.12-1': 'COMERCIO VAREJISTA DE MERCADORIAS EM GERAL, COM PREDOMINÂNCIA DE PRODUTOS ALIMENTICIOS - MINIMERCADOS, MERCEARIAS E ARMAZENS',
+        #                     '47.13-0': 'COMERCIO VAREJISTA DE MERCADORIAS EM GERAL, SEM PREDOMINÂNCIA DE PRODUTOS ALIMENTICIOS',
+        #                     '47.21-1': 'COMERCIO VAREJISTA DE PRODUTOS DE PADARIA, LATICINIO, DOCES, BALAS E SEMELHANTES',
+        #                     '47.22-9': 'COMERCIO VAREJISTA DE CARNES E PESCADOS - ACOUGUES E PEIXARIAS',
+        #                     '47.23-7': 'COMERCIO VAREJISTA DE BEBIDAS',
+        #                     '47.24-5': 'COMERCIO VAREJISTA DE HORTIFRUTIGRANJEIROS',
+        #                     '47.29-6': 'COMERCIO VAREJISTA DE PRODUTOS ALIMENTICIOS EM GERAL OU ESPECIALIZADO EM PRODUTOS ALIMENTICIOS NAO ESPECIFICADOS ANTERIORMENTE; PRODUTOS DO FUMO',
+        #                     '47.31-8': 'COMERCIO VAREJISTA DE COMBUSTIVEIS PARA VEICULOS AUTOMOTORES',
+        #                     '47.32-6': 'COMERCIO VAREJISTA DE LUBRIFICANTES',
+        #                     '47.41-5': 'COMERCIO VAREJISTA DE TINTAS E MATERIAIS PARA PINTURA',
+        #                     '47.42-3': 'COMERCIO VAREJISTA DE MATERIAL ELETRICO',
+        #                     '47.43-1': 'COMERCIO VAREJISTA DE VIDROS',
+        #                     '47.44-0': 'COMERCIO VAREJISTA DE FERRAGENS, MADEIRA E MATERIAIS DE CONSTRUCAO',
+        #                     '47.51-2': 'COMERCIO VAREJISTA ESPECIALIZADO DE EQUIPAMENTOS E SUPRIMENTOS DE INFORMATICA',
+        #                     '47.52-1': 'COMERCIO VAREJISTA ESPECIALIZADO DE EQUIPAMENTOS DE TELEFONIA E COMUNICACAO',
+        #                     '47.53-9': 'COMERCIO VAREJISTA ESPECIALIZADO DE ELETRODOMESTICOS E EQUIPAMENTOS DE AUDIO E VIDEO',
+        #                     '47.54-7': 'COMERCIO VAREJISTA ESPECIALIZADO DE MOVEIS, COLCHOARIA E ARTIGOS DE ILUMINACAO',
+        #                     '47.55-5': 'COMERCIO VAREJISTA ESPECIALIZADO DE TECIDOS E ARTIGOS DE CAMA, MESA E BANHO',
+        #                     '47.56-3': 'COMERCIO VAREJISTA ESPECIALIZADO DE INSTRUMENTOS MUSICAIS E ACESSORIOS',
+        #                     '47.57-1': 'COMERCIO VAREJISTA ESPECIALIZADO DE PECAS E ACESSORIOS PARA APARELHOS ELETROELETRONICOS PARA USO DOMESTICO, EXCETO INFORMATICA E COMUNICACAO',
+        #                     '47.59-8': 'COMERCIO VAREJISTA DE ARTIGOS DE USO DOMESTICO NAO ESPECIFICADOS ANTERIORMENTE',
+        #                     '47.61-0': 'COMERCIO VAREJISTA DE LIVROS, JORNAIS, REVISTAS E PAPELARIA',
+        #                     '47.62-8': 'COMERCIO VAREJISTA DE DISCOS, CDS, DVDS E FITAS',
+        #                     '47.63-6': 'COMERCIO VAREJISTA DE ARTIGOS RECREATIVOS E ESPORTIVOS',
+        #                     '47.71-7': 'COMERCIO VAREJISTA DE PRODUTOS FARMACEUTICOS PARA USO HUMANO E VETERINARIO',
+        #                     '47.72-5': 'COMERCIO VAREJISTA DE COSMETICOS, PRODUTOS DE PERFUMARIA E DE HIGIENE PESSOAL',
+        #                     '47.73-3': 'COMERCIO VAREJISTA DE ARTIGOS MEDICOS E ORTOPEDICOS',
+        #                     '47.74-1': 'COMERCIO VAREJISTA DE ARTIGOS DE OPTICA',
+        #                     '47.81-4': 'COMERCIO VAREJISTA DE ARTIGOS DO VESTUARIO E ACESSORIOS',
+        #                     '47.82-2': 'COMERCIO VAREJISTA DE CALCADOS E ARTIGOS DE VIAGEM',
+        #                     '47.83-1': 'COMERCIO VAREJISTA DE JOIAS E RELOGIOS',
+        #                     '47.84-9': 'COMERCIO VAREJISTA DE GAS LIQUEFEITO DE PETROLEO (GLP)',
+        #                     '47.85-7':'COMERCIO VAREJISTA DE ARTIGOS USADOS',
+        #                     '47.89-0': 'COMERCIO VAREJISTA DE OUTROS PRODUTOS NOVOS NAO ESPECIFICADOS ANTERIORMENTE',
+        #                     '47.90-3': 'COMERCIO AMBULANTE E OUTROS TIPOS DE COMERCIO VAREJISTA',
+        #                     '49.11-6': 'TRANSPORTE FERROVIARIO DE CARGA',
+        #                     '49.12-4': 'TRANSPORTE METROFERROVIARIO DE PASSAGEIROS',
+        #                     '49.21-3': 'TRANSPORTE RODOVIARIO COLETIVO DE PASSAGEIROS, COM ITINERARIO FIXO, MUNICIPAL E EM REGIAO METROPOLITANA',
+        #                     '49.22-1': 'TRANSPORTE RODOVIARIO COLETIVO DE PASSAGEIROS, COM ITINERARIO FIXO, INTERMUNICIPAL, INTERESTADUAL E INTERNACIONAL',
+        #                     '49.23-0': 'TRANSPORTE RODOVIARIO DE TAXI',
+        #                     '49.24-8': 'TRANSPORTE ESCOLAR',
+        #                     '49.29-9': 'TRANSPORTE RODOVIARIO COLETIVO DE PASSAGEIROS, SOB REGIME DE FRETAMENTO, E OUTROS TRANSPORTES RODOVIARIOS NAO ESPECIFICADOS ANTERIORMENTE',
+        #                     '49.30-2': 'TRANSPORTE RODOVIARIO DE CARGA',
+        #                     '49.40-0': 'TRANSPORTE DUTOVIARIO',
+        #                     '49.50-7': 'TRENS TURISTICOS, TELEFERICOS E SIMILARES',
+        #                     '50.11-4': 'TRANSPORTE MARITIMO DE CABOTAGEM',
+        #                     '50.12-2': 'TRANSPORTE MARITIMO DE LONGO CURSO',
+        #                     '50.21-1': 'TRANSPORTE POR NAVEGACAO INTERIOR DE CARGA',
+        #                     '50.22-0': 'TRANSPORTE POR NAVEGACAO INTERIOR DE PASSAGEIROS EM LINHAS REGULARES',
+        #                     '50.30-1': 'NAVEGACAO DE APOIO',
+        #                     '50.91-2': 'TRANSPORTE POR NAVEGACAO DE TRAVESSIA',
+        #                     '50.99-8': 'TRANSPORTES AQUAVIARIOS NAO ESPECIFICADOS ANTERIORMENTE',
+        #                     '51.11-1': 'TRANSPORTE AEREO DE PASSAGEIROS REGULAR',
+        #                     '51.12-9': 'TRANSPORTE AEREO DE PASSAGEIROS NAO-REGULAR',
+        #                     '51.20-0': 'TRANSPORTE AEREO DE CARGA',
+        #                     '51.30-7': 'TRANSPORTE ESPACIAL',
+        #                     '52.11-7': 'ARMAZENAMENTO',
+        #                     '52.12-5': 'CARGA E DESCARGA',
+        #                     '52.21-4': 'CONCESSIONARIAS DE RODOVIAS, PONTES, TUNEIS E SERVICOS RELACIONADOS',
+        #                     '52.22-2': 'TERMINAIS RODOVIARIOS E FERROVIARIOS',
+        #                     '52.23-1': 'ESTACIONAMENTO DE VEICULOS',
+        #                     '52.29-0': 'ATIVIDADES AUXILIARES DOS TRANSPORTES TERRESTRES NAO ESPECIFICADAS ANTERIORMENTE',
+        #                     '52.31-1': 'GESTAO DE PORTOS E TERMINAIS',
+        #                     '52.32-0': 'ATIVIDADES DE AGENCIAMENTO MARITIMO',
+        #                     '52.39-7': 'ATIVIDADES AUXILIARES DOS TRANSPORTES AQUAVIARIOS NAO ESPECIFICADAS ANTERIORMENTE',
+        #                     '52.40-1': 'ATIVIDADES AUXILIARES DOS TRANSPORTES AEREOS',
+        #                     '52.50-8': 'ATIVIDADES RELACIONADAS A ORGANIZACAO DO TRANSPORTE DE CARGA',
+        #                     '53.10-5': 'ATIVIDADES DE CORREIO',
+        #                     '53.20-2': 'ATIVIDADES DE MALOTE E DE ENTREGA',
+        #                     '55.10-8': 'HOTEIS E SIMILARES',
+        #                     '55.90-6': 'OUTROS TIPOS DE ALOJAMENTO NAO ESPECIFICADOS ANTERIORMENTE',
+        #                     '56.11-2': 'RESTAURANTES E OUTROS ESTABELECIMENTOS DE SERVICOS DE ALIMENTACAO E BEBIDAS',
+        #                     '56.12-1': 'SERVICOS AMBULANTES DE ALIMENTACAO',
+        #                     '56.20-1': 'SERVICOS DE CATERING, BUFE E OUTROS SERVICOS DE COMIDA PREPARADA',
+        #                     '58.11-5': 'EDICAO DE LIVROS',
+        #                     '58.12-3': 'EDICAO DE JORNAIS',
+        #                     '58.13-1': 'EDICAO DE REVISTAS',
+        #                     '58.19-1': 'EDICAO DE CADASTROS, LISTAS E OUTROS PRODUTOS GRAFICOS',
+        #                     '58.21-2': 'EDICAO INTEGRADA A IMPRESSAO DE LIVROS',
+        #                     '58.22-1': 'EDICAO INTEGRADA A IMPRESSAO DE JORNAIS',
+        #                     '58.23-9': 'EDICAO INTEGRADA A IMPRESSAO DE REVISTAS',
+        #                     '58.29-8': 'EDICAO INTEGRADA A IMPRESSAO DE CADASTROS, LISTAS E OUTROS PRODUTOS GRAFICOS',
+        #                     '59.11-1': 'ATIVIDADES DE PRODUCAO CINEMATOGRAFICA, DE VIDEOS E DE PROGRAMAS DE TELEVISAO',
+        #                     '59.12-0': 'ATIVIDADES DE POS-PRODUCAO CINEMATOGRAFICA, DE VIDEOS E DE PROGRAMAS DE TELEVISAO',
+        #                     '59.13-8': 'DISTRIBUICAO CINEMATOGRAFICA, DE VIDEO E DE PROGRAMAS DE TELEVISAO',
+        #                     '59.14-6': 'ATIVIDADES DE EXIBICAO CINEMATOGRAFICA',
+        #                     '59.20-1': 'ATIVIDADES DE GRAVACAO DE SOM E DE EDICAO DE MUSICA',
+        #                     '60.10-1': 'ATIVIDADES DE RADIO',
+        #                     '60.21-7': 'ATIVIDADES DE TELEVISAO ABERTA',
+        #                     '60.22-5': 'PROGRAMADORAS E ATIVIDADES RELACIONADAS A TELEVISAO POR ASSINATURA',
+        #                     '61.10-8': 'TELECOMUNICACÕES POR FIO',
+        #                     '61.20-5': 'TELECOMUNICACÕES SEM FIO',
+        #                     '61.30-2': 'TELECOMUNICACÕES POR SATELITE',
+        #                     '61.41-8': 'OPERADORAS DE TELEVISAO POR ASSINATURA POR CABO',
+        #                     '61.42-6': 'OPERADORAS DE TELEVISAO POR ASSINATURA POR MICROONDAS',
+        #                     '61.43-4': 'OPERADORAS DE TELEVISAO POR ASSINATURA POR SATELITE',
+        #                     '61.90-6': 'OUTRAS ATIVIDADES DE TELECOMUNICACÕES',
+        #                     '62.01-5': 'DESENVOLVIMENTO DE PROGRAMAS DE COMPUTADOR SOB ENCOMENDA',
+        #                     '62.02-3': 'DESENVOLVIMENTO E LICENCIAMENTO DE PROGRAMAS DE COMPUTADOR CUSTOMIZAVEIS',
+        #                     '62.03-1': 'DESENVOLVIMENTO E LICENCIAMENTO DE PROGRAMAS DE COMPUTADOR NAO-CUSTOMIZAVEIS',
+        #                     '62.04-0': 'CONSULTORIA EM TECNOLOGIA DA INFORMACAO',
+        #                     '62.09-1': 'SUPORTE TECNICO, MANUTENCAO E OUTROS SERVICOS EM TECNOLOGIA DA INFORMACAO',
+        #                     '63.11-9': 'TRATAMENTO DE DADOS, PROVEDORES DE SERVICOS DE APLICACAO E SERVICOS DE HOSPEDAGEM NA INTERNET',
+        #                     '63.19-4': 'PORTAIS, PROVEDORES DE CONTEUDO E OUTROS SERVICOS DE INFORMACAO NA INTERNET',
+        #                     '63.91-7': 'AGENCIAS DE NOTICIAS',
+        #                     '63.99-2': 'OUTRAS ATIVIDADES DE PRESTACAO DE SERVICOS DE INFORMACAO NAO ESPECIFICADAS ANTERIORMENTE',
+        #                     '64.10-7': 'BANCO CENTRAL',
+        #                     '64.21-2': 'BANCOS COMERCIAIS',
+        #                     '64.22-1': 'BANCOS MULTIPLOS, COM CARTEIRA COMERCIAL',
+        #                     '64.23-9': 'CAIXAS ECONOMICAS',
+        #                     '64.24-7': 'CREDITO COOPERATIVO',
+        #                     '64.31-0': 'BANCOS MULTIPLOS, SEM CARTEIRA COMERCIAL',
+        #                     '64.32-8': 'BANCOS DE INVESTIMENTO',
+        #                     '64.33-6': 'BANCOS DE DESENVOLVIMENTO',
+        #                     '64.34-4': 'AGENCIAS DE FOMENTO',
+        #                     '64.35-2': 'CREDITO IMOBILIARIO',
+        #                     '64.36-1': 'SOCIEDADES DE CREDITO, FINANCIAMENTO E INVESTIMENTO - FINANCEIRAS',
+        #                     '64.37-9': 'SOCIEDADES DE CREDITO AO MICROEMPREENDEDOR',
+        #                     '64.38-7': 'BANCOS DE CÂMBIO E OUTRAS INSTITUICÕES DE INTERMEDIACAO NAO-MONETARIA',
+        #                     '64.40-9': 'ARRENDAMENTO MERCANTIL',
+        #                     '64.50-6': 'SOCIEDADES DE CAPITALIZACAO',
+        #                     '64.61-1': 'HOLDINGS DE INSTITUICÕES FINANCEIRAS',
+        #                     '64.62-0': 'HOLDINGS DE INSTITUICÕES NAO-FINANCEIRAS',
+        #                     '64.63-8': 'OUTRAS SOCIEDADES DE PARTICIPACAO, EXCETO HOLDINGS',
+        #                     '64.70-1': 'FUNDOS DE INVESTIMENTO',
+        #                     '64.91-3': 'SOCIEDADES DE FOMENTO MERCANTIL - FACTORING',
+        #                     '64.92-1': 'SECURITIZACAO DE CREDITOS',
+        #                     '64.93-0': 'ADMINISTRACAO DE CONSORCIOS PARA AQUISICAO DE BENS E DIREITOS',
+        #                     '64.99-9': 'OUTRAS ATIVIDADES DE SERVICOS FINANCEIROS NAO ESPECIFICADAS ANTERIORMENTE',
+        #                     '65.11-1': 'SEGUROS DE VIDA',
+        #                     '65.12-0': 'SEGUROS NAO-VIDA',
+        #                     '65.20-1': 'SEGUROS-SAUDE',
+        #                     '65.30-8': 'RESSEGUROS',
+        #                     '65.41-3': 'PREVIDENCIA COMPLEMENTAR FECHADA',
+        #                     '65.42-1': 'PREVIDENCIA COMPLEMENTAR ABERTA',
+        #                     '65.50-2': 'PLANOS DE SAUDE',
+        #                     '66.11-8': 'ADMINISTRACAO DE BOLSAS E MERCADOS DE BALCAO ORGANIZADOS',
+        #                     '66.12-6': 'ATIVIDADES DE INTERMEDIARIOS EM TRANSACÕES DE TITULOS, VALORES MOBILIARIOS E MERCADORIAS',
+        #                     '66.13-4': 'ADMINISTRACAO DE CARTÕES DE CREDITO',
+        #                     '66.19-3': 'ATIVIDADES AUXILIARES DOS SERVICOS FINANCEIROS NAO ESPECIFICADAS ANTERIORMENTE',
+        #                     '66.21-5': 'AVALIACAO DE RISCOS E PERDAS',
+        #                     '66.22-3': 'CORRETORES E AGENTES DE SEGUROS, DE PLANOS DE PREVIDENCIA COMPLEMENTAR E DE SAUDE',
+        #                     '66.29-1': 'ATIVIDADES AUXILIARES DOS SEGUROS, DA PREVIDENCIA COMPLEMENTAR E DOS PLANOS DE SAUDE NAO ESPECIFICADAS ANTERIORMENTE',
+        #                     '66.30-4': 'ATIVIDADES DE ADMINISTRACAO DE FUNDOS POR CONTRATO OU COMISSAO',
+        #                     '68.10-2': 'ATIVIDADES IMOBILIARIAS DE IMOVEIS PROPRIOS',
+        #                     '68.21-8': 'INTERMEDIACAO NA COMPRA, VENDA E ALUGUEL DE IMOVEIS',
+        #                     '68.22-6': 'GESTAO E ADMINISTRACAO DA PROPRIEDADE IMOBILIARIA',
+        #                     '69.11-7': 'ATIVIDADES JURIDICAS, EXCETO CARTORIOS',
+        #                     '69.12-5': 'CARTORIOS',
+        #                     '69.20-6': 'ATIVIDADES DE CONTABILIDADE, CONSULTORIA E AUDITORIA CONTABIL E TRIBUTARIA',
+        #                     '70.10-7': 'SEDES DE EMPRESAS E UNIDADES ADMINISTRATIVAS LOCAIS',
+        #                     '70.20-4': 'ATIVIDADES DE CONSULTORIA EM GESTAO EMPRESARIAL',
+        #                     '71.11-1': 'SERVICOS DE ARQUITETURA',
+        #                     '71.12-0': 'SERVICOS DE ENGENHARIA',
+        #                     '71.19-7': 'ATIVIDADES TECNICAS RELACIONADAS A ARQUITETURA E ENGENHARIA',
+        #                     '71.20-1': 'TESTES E ANALISES TECNICAS',
+        #                     '72.10-0': 'PESQUISA E DESENVOLVIMENTO EXPERIMENTAL EM CIENCIAS FISICAS E NATURAIS',
+        #                     '72.20-7': 'PESQUISA E DESENVOLVIMENTO EXPERIMENTAL EM CIENCIAS SOCIAIS E HUMANAS',
+        #                     '73.11-4': 'AGENCIAS DE PUBLICIDADE',
+        #                     '73.12-2': 'AGENCIAMENTO DE ESPACOS PARA PUBLICIDADE, EXCETO EM VEICULOS DE COMUNICACAO',
+        #                     '73.19-0': 'ATIVIDADES DE PUBLICIDADE NAO ESPECIFICADAS ANTERIORMENTE',
+        #                     '73.20-3': 'PESQUISAS DE MERCADO E DE OPINIAO PUBLICA',
+        #                     '74.10-2': 'DESIGN E DECORACAO DE INTERIORES',
+        #                     '74.20-0': 'ATIVIDADES FOTOGRAFICAS E SIMILARES',
+        #                     '74.90-1': 'ATIVIDADES PROFISSIONAIS, CIENTIFICAS E TECNICAS NAO ESPECIFICADAS ANTERIORMENTE',
+        #                     '75.00-1': 'ATIVIDADES VETERINARIAS',
+        #                     '77.11-0': 'LOCACAO DE AUTOMOVEIS SEM CONDUTOR',
+        #                     '77.19-5': 'LOCACAO DE MEIOS DE TRANSPORTE, EXCETO AUTOMOVEIS, SEM CONDUTOR',
+        #                     '77.21-7': 'ALUGUEL DE EQUIPAMENTOS RECREATIVOS E ESPORTIVOS',
+        #                     '77.22-5': 'ALUGUEL DE FITAS DE VIDEO, DVDS E SIMILARES',
+        #                     '77.23-3': 'ALUGUEL DE OBJETOS DO VESTUARIO, JOIAS E ACESSORIOS',
+        #                     '77.29-2': 'ALUGUEL DE OBJETOS PESSOAIS E DOMESTICOS NAO ESPECIFICADOS ANTERIORMENTE',
+        #                     '77.31-4': 'ALUGUEL DE MAQUINAS E EQUIPAMENTOS AGRICOLAS SEM OPERADOR',
+        #                     '77.32-2': 'ALUGUEL DE MAQUINAS E EQUIPAMENTOS PARA CONSTRUCAO SEM OPERADOR',
+        #                     '77.33-1': 'ALUGUEL DE MAQUINAS E EQUIPAMENTOS PARA ESCRITORIO',
+        #                     '77.39-0': 'ALUGUEL DE MAQUINAS E EQUIPAMENTOS NAO ESPECIFICADOS ANTERIORMENTE',
+        #                     '77.40-3': 'GESTAO DE ATIVOS INTANGIVEIS NAO-FINANCEIROS',
+        #                     '78.10-8': 'SELECAO E AGENCIAMENTO DE MAO-DE-OBRA',
+        #                     '78.20-5': 'LOCACAO DE MAO-DE-OBRA TEMPORARIA',
+        #                     '78.30-2': 'FORNECIMENTO E GESTAO DE RECURSOS HUMANOS PARA TERCEIROS',
+        #                     '79.11-2': 'AGENCIAS DE VIAGENS',
+        #                     '79.12-1': 'OPERADORES TURISTICOS',
+        #                     '79.90-2': 'SERVICOS DE RESERVAS E OUTROS SERVICOS DE TURISMO NAO ESPECIFICADOS ANTERIORMENTE',
+        #                     '80.11-1': 'ATIVIDADES DE VIGILÂNCIA E SEGURANCA PRIVADA',
+        #                     '80.12-9': 'ATIVIDADES DE TRANSPORTE DE VALORES',
+        #                     '80.20-0': 'ATIVIDADES DE MONITORAMENTO DE SISTEMAS DE SEGURANCA',
+        #                     '80.30-7': 'ATIVIDADES DE INVESTIGACAO PARTICULAR',
+        #                     '81.11-7': 'SERVICOS COMBINADOS PARA APOIO A EDIFICIOS, EXCETO CONDOMINIOS PREDIAIS',
+        #                     '81.12-5': 'CONDOMINIOS PREDIAIS',
+        #                     '81.21-4': 'LIMPEZA EM PREDIOS E EM DOMICILIOS',
+        #                     '81.22-2': 'IMUNIZACAO E CONTROLE DE PRAGAS URBANAS',
+        #                     '81.29-0': 'ATIVIDADES DE LIMPEZA NAO ESPECIFICADAS ANTERIORMENTE',
+        #                     '81.30-3': 'ATIVIDADES PAISAGISTICAS',
+        #                     '82.11-3': 'SERVICOS COMBINADOS DE ESCRITORIO E APOIO ADMINISTRATIVO',
+        #                     '82.19-9': 'FOTOCOPIAS, PREPARACAO DE DOCUMENTOS E OUTROS SERVICOS ESPECIALIZADOS DE APOIO ADMINISTRATIVO',
+        #                     '82.20-2': 'ATIVIDADES DE TELEATENDIMENTO',
+        #                     '82.30-0': 'ATIVIDADES DE ORGANIZACAO DE EVENTOS, EXCETO CULTURAIS E ESPORTIVOS',
+        #                     '82.91-1': 'ATIVIDADES DE COBRANCA E INFORMACOES CADASTRAIS',
+        #                     '82.92-0': 'ENVASAMENTO E EMPACOTAMENTO SOB CONTRATO',
+        #                     '82.99-7': 'ATIVIDADES DE SERVICOS PRESTADOS PRINCIPALMENTE AS EMPRESAS NAO ESPECIFICADAS ANTERIORMENTE',
+        #                     '84.11-6': 'ADMINISTRACAO PUBLICA EM GERAL',
+        #                     '84.12-4': 'REGULACAO DAS ATIVIDADES DE SAUDE, EDUCACAO, SERVICOS CULTURAIS E OUTROS SERVICOS SOCIAIS',
+        #                     '84.13-2': 'REGULACAO DAS ATIVIDADES ECONOMICAS',
+        #                     '84.21-3': 'RELACÕES EXTERIORES',
+        #                     '84.22-1': 'DEFESA',
+        #                     '84.23-0': 'JUSTICA',
+        #                     '84.24-8': 'SEGURANCA E ORDEM PUBLICA',
+        #                     '84.25-6': 'DEFESA CIVIL',
+        #                     '84.30-2': 'SEGURIDADE SOCIAL OBRIGATORIA',
+        #                     '85.11-2': 'EDUCACAO INFANTIL - CRECHE',
+        #                     '85.12-1': 'EDUCACAO INFANTIL - PRE-ESCOLA',
+        #                     '85.13-9': 'ENSINO FUNDAMENTAL',
+        #                     '85.20-1': 'ENSINO MEDIO',
+        #                     '85.31-7': 'EDUCACAO SUPERIOR - GRADUACAO',
+        #                     '85.32-5': 'EDUCACAO SUPERIOR - GRADUACAO E POS-GRADUACAO',
+        #                     '85.33-3': 'EDUCACAO SUPERIOR - POS-GRADUACAO E EXTENSAO',
+        #                     '85.41-4': 'EDUCACAO PROFISSIONAL DE NIVEL TECNICO',
+        #                     '85.42-2': 'EDUCACAO PROFISSIONAL DE NIVEL TECNOLOGICO',
+        #                     '85.50-3': 'ATIVIDADES DE APOIO A EDUCACAO',
+        #                     '85.91-1': 'ENSINO DE ESPORTES',
+        #                     '85.92-9': 'ENSINO DE ARTE E CULTURA',
+        #                     '85.93-7': 'ENSINO DE IDIOMAS',
+        #                     '85.99-6': 'ATIVIDADES DE ENSINO NAO ESPECIFICADAS ANTERIORMENTE',
+        #                     '86.10-1': 'ATIVIDADES DE ATENDIMENTO HOSPITALAR',
+        #                     '86.21-6': 'SERVICOS MOVEIS DE ATENDIMENTO A URGENCIAS',
+        #                     '86.22-4': 'SERVICOS DE REMOCAO DE PACIENTES, EXCETO OS SERVICOS MOVEIS DE ATENDIMENTO A URGENCIAS',
+        #                     '86.30-5': 'ATIVIDADES DE ATENCAO AMBULATORIAL EXECUTADAS POR MEDICOS E ODONTOLOGOS',
+        #                     '86.40-2': 'ATIVIDADES DE SERVICOS DE COMPLEMENTACAO DIAGNOSTICA E TERAPEUTICA',
+        #                     '86.50-0': 'ATIVIDADES DE PROFISSIONAIS DA AREA DE SAUDE, EXCETO MEDICOS E ODONTOLOGOS',
+        #                     '86.60-7': 'ATIVIDADES DE APOIO A GESTAO DE SAUDE',
+        #                     '86.90-9': 'ATIVIDADES DE ATENCAO A SAUDE HUMANA NAO ESPECIFICADAS ANTERIORMENTE',
+        #                     '87.11-5': 'ATIVIDADES DE ASSISTENCIA A IDOSOS, DEFICIENTES FISICOS, IMUNODEPRIMIDOS E CONVALESCENTES PRESTADAS EM RESIDENCIAS COLETIVAS E PARTICULARES',
+        #                     '87.12-3': 'ATIVIDADES DE FORNECIMENTO DE INFRA-ESTRUTURA DE APOIO E ASSISTENCIA A PACIENTE NO DOMICILIO',
+        #                     '87.20-4': 'ATIVIDADES DE ASSISTENCIA PSICOSSOCIAL E A SAUDE A PORTADORES DE DISTURBIOS PSIQUICOS, DEFICIENCIA MENTAL E DEPENDENCIA QUIMICA',
+        #                     '87.30-1': 'ATIVIDADES DE ASSISTENCIA SOCIAL PRESTADAS EM RESIDENCIAS COLETIVAS E PARTICULARES',
+        #                     '88.00-6': 'SERVICOS DE ASSISTENCIA SOCIAL SEM ALOJAMENTO',
+        #                     '90.01-9': 'ARTES CENICAS, ESPETACULOS E ATIVIDADES COMPLEMENTARES',
+        #                     '90.02-7': 'CRIACAO ARTISTICA',
+        #                     '90.03-5': 'GESTAO DE ESPACOS PARA ARTES CENICAS, ESPETACULOS E OUTRAS ATIVIDADES ARTISTICAS',
+        #                     '91.01-5': 'ATIVIDADES DE BIBLIOTECAS E ARQUIVOS',
+        #                     '91.02-3': 'ATIVIDADES DE MUSEUS E DE EXPLORACAO, RESTAURACAO ARTISTICA E CONSERVACAO DE LUGARES E PREDIOS HISTORICOS E ATRACÕES SIMILARES',
+        #                     '91.03-1': 'ATIVIDADES DE JARDINS BOTÂNICOS, ZOOLOGICOS, PARQUES NACIONAIS, RESERVAS ECOLOGICAS E AREAS DE PROTECAO AMBIENTAL',
+        #                     '92.00-3': 'ATIVIDADES DE EXPLORACAO DE JOGOS DE AZAR E APOSTAS',
+        #                     '93.11-5': 'GESTAO DE INSTALACÕES DE ESPORTES',
+        #                     '93.12-3': 'CLUBES SOCIAIS, ESPORTIVOS E SIMILARES',
+        #                     '93.13-1': 'ATIVIDADES DE CONDICIONAMENTO FISICO',
+        #                     '93.19-1': 'ATIVIDADES ESPORTIVAS NAO ESPECIFICADAS ANTERIORMENTE',
+        #                     '93.21-2': 'PARQUES DE DIVERSAO E PARQUES TEMATICOS',
+        #                     '93.29-8': 'ATIVIDADES DE RECREACAO E LAZER NAO ESPECIFICADAS ANTERIORMENTE',
+        #                     '94.11-1': 'ATIVIDADES DE ORGANIZACÕES ASSOCIATIVAS PATRONAIS E EMPRESARIAIS',
+        #                     '94.12-0': 'ATIVIDADES DE ORGANIZACÕES ASSOCIATIVAS PROFISSIONAIS',
+        #                     '94.20-1': 'ATIVIDADES DE ORGANIZACÕES SINDICAIS',
+        #                     '94.30-8': 'ATIVIDADES DE ASSOCIACÕES DE DEFESA DE DIREITOS SOCIAIS',
+        #                     '94.91-0': 'ATIVIDADES DE ORGANIZACÕES RELIGIOSAS',
+        #                     '94.92-8': 'ATIVIDADES DE ORGANIZACÕES POLITICAS',
+        #                     '94.93-6': 'ATIVIDADES DE ORGANIZACÕES ASSOCIATIVAS LIGADAS A CULTURA E A ARTE',
+        #                     '94.99-5': 'ATIVIDADES ASSOCIATIVAS NAO ESPECIFICADAS ANTERIORMENTE',
+        #                     '95.11-8': 'REPARACAO E MANUTENCAO DE COMPUTADORES E DE EQUIPAMENTOS PERIFERICOS',
+        #                     '95.12-6': 'REPARACAO E MANUTENCAO DE EQUIPAMENTOS DE COMUNICACAO',
+        #                     '95.21-5': 'REPARACAO E MANUTENCAO DE EQUIPAMENTOS ELETROELETRONICOS DE USO PESSOAL E DOMESTICO',
+        #                     '95.29-1': 'REPARACAO E MANUTENCAO DE OBJETOS E EQUIPAMENTOS PESSOAIS E DOMESTICOS NAO ESPECIFICADOS ANTERIORMENTE',
+        #                     '96.01-7': 'LAVANDERIAS, TINTURARIAS E TOALHEIROS',
+        #                     '96.02-5': 'CABELEIREIROS E OUTRAS ATIVIDADES DE TRATAMENTO DE BELEZA',
+        #                     '96.03-3': 'ATIVIDADES FUNERARIAS E SERVICOS RELACIONADOS',
+        #                     '96.09-2': 'ATIVIDADES DE SERVICOS PESSOAIS NAO ESPECIFICADAS ANTERIORMENTE',
+        #                     '97.00-5': 'SERVICOS DOMESTICOS',
+        #                     '99.00-8': 'ORGANISMOS INTERNACIONAIS E OUTRAS INSTITUICOES EXTRATERRITORIAIS'}
+        #
+        # self.dic_cnae_10 = {'01.11-2': 'CULTIVO DE CEREAIS PARA GRAOS',
+        #                '01.12-0': 'CULTIVO DE ALGODAO HERBACEO',
+        #                '01.13-9': 'CULTIVO DE CANA-DE ACUCAR',
+        #                '01.14-7': 'CULTIVO DE FUMO',
+        #                '01.15-5': 'CULTIVO DE SOJA',
+        #                '01.19-8': 'CULTIVO DE OUTROS PRODUTOS DE LAVOURA TEMPORARIA',
+        #                '01.21-0': 'CULTIVO DE HORTALICAS, LEGUMES E OUTROS PRODUTOS DA HORTICULTURA',
+        #                '01.22-8': 'CULTIVO DE FLORES, PLANTAS ORNAMENTAIS E PRODUTOS DE VIVEIRO',
+        #                '01.31-7': 'CULTIVO DE FRUTAS CITRICAS',
+        #                '01.32-5': 'CULTIVO DE CAFE',
+        #                '01.33-3': 'CULTIVO DE CACAU',
+        #                '01.34-1': 'CULTIVO DE UVA',
+        #                '01.39-2': 'CULTIVO DE OUTROS PRODUTOS DE LAVOURA PERMANENTE',
+        #                '01.41-4': 'CRIACAO DE BOVINOS',
+        #                '01.42-2': 'CRIACAO DE OUTROS ANIMAIS DE GRANDE PORTE',
+        #                '01.43-0': 'CRIACAO DE OVINOS',
+        #                '01.44-9': 'CRIACAO DE SUINOS',
+        #                '01.45-7': 'CRIACAO DE AVES',
+        #                '01.46-5': 'CRIACAO DE OUTROS ANIMAIS',
+        #                '01.50-3': 'PRODUCAO MISTA: LAVOURA E PECUARIA',
+        #                '01.61-9': 'ATIVIDADES DE SERVICOS RELACIONADOS COM A AGRICULTURA',
+        #                '01.62-7': 'ATIVIDADES DE SERVICOS RELACIONADOS COM A PECUARIA, EXCETO ATIVIDADES VETERINARIAS',
+        #                '01.70-8': 'CACA, REPOVOAMENTO CINEGETICO E SERVICOS RELACIONADOS',
+        #                '02.11-9': 'SILVICULTURA',
+        #                '02.12-7': 'EXPLORACAO FLORESTAL',
+        #                '02.13-5': 'ATIVIDADES DE SERVICOS RELACIONADOS COM A SILVICULTURA E A EXPLORACAO FLORESTAL',
+        #                '05.11-8': 'PESCA E SERVICOS RELACIONADOS',
+        #                '05.12-6': 'AQUICULTURA E SERVICOS RELACIONADOS',
+        #                '10.00-6': 'EXTRACAO DE CARVAO MINERAL',
+        #                '11.10-0': 'EXTRACAO DE PETROLEO E GAS NATURAL',
+        #                '11.20-7': 'ATIVIDADES DE SERVICOS RELACIONADOS COM A EXTRACAO DE PETROLEO E GAS - EXCETO A PROSPECCAO REALIZADA POR TERCEIROS',
+        #                '13.10-2': 'EXTRACAO DE MINERIO DE FERRO',
+        #                '13.21-8': 'EXTRACAO DE MINERIO DE ALUMINIO',
+        #                '13.22-6': 'EXTRACAO DE MINERIO DE ESTANHO',
+        #                '13.23-4': 'EXTRACAO DE MINERIO DE MANGANES',
+        #                '13.24-2': 'EXTRACAO DE MINERIO DE METAIS PRECIOSOS',
+        #                '13.25-0': 'EXTRACAO DE MINERAIS RADIOATIVOS',
+        #                '13.29-3': 'EXTRACAO DE OUTROS MINERAIS METALICOS NAO-FERROSOS',
+        #                '14.10-9': 'EXTRACAO DE PEDRA, AREIA E ARGILA',
+        #                '14.21-4': 'EXTRACAO DE MINERAIS PARA FABRICACAO DE ADUBOS, FERTILIZANTES E PRODUTOS QUIMICOS',
+        #                '14.22-2': 'EXTRACAO E REFINO DE SAL MARINHO E SAL-GEMA',
+        #                '14.29-0': 'EXTRACAO DE OUTROS MINERAIS NAO-METALICOS',
+        #                '15.11-3': 'ABATE DE RESES, PREPARACAO DE PRODUTOS DE CARNE',
+        #                '15.12-1': 'ABATE DE AVES E OUTROS PEQUENOS ANIMAIS E PREPARACAO DE PRODUTOS DE CARNE',
+        #                '15.13-0': 'PREPARACAO DE CARNE, BANHA E PRODUTOS DE SALSICHARIA NAO ASSOCIADA AO ABATE',
+        #                '15.14-8': 'PREPARACAO E PRESERVACAO DO PESCADO E FABRICACAO DE CONSERVAS DE PEIXES, CRUSTACEOS E MOLUSCOS',
+        #                '15.21-0': 'PROCESSAMENTO, PRESERVACAO E PRODUCAO DE CONSERVAS DE FRUTAS',
+        #                '15.22-9': 'PROCESSAMENTO, PRESERVACAO E PRODUCAO DE CONSERVAS DE LEGUMES E OUTROS VEGETAIS',
+        #                '15.23-7': 'PRODUCAO DE SUCOS DE FRUTAS E DE LEGUMES',
+        #                '15.31-8': 'PRODUCAO DE OLEOS VEGETAIS EM BRUTO',
+        #                '15.32-6': 'REFINO DE OLEOS VEGETAIS',
+        #                '15.33-4': 'PREPARACAO DE MARGARINA E DE OUTRAS GORDURAS VEGETAIS E DE OLEOS DE ORIGEM ANIMAL NAO COMESTIVEIS',
+        #                '15.41-5': 'PREPARACAO DO LEITE',
+        #                '15.42-3': 'FABRICACAO DE PRODUTOS DO LATICINIO',
+        #                '15.43-1': 'FABRICACAO DE SORVETES',
+        #                '15.51-2': 'BENEFICIAMENTO DE ARROZ E FABRICACAO DE PRODUTOS DO ARROZ',
+        #                '15.52-0': 'MOAGEM DE TRIGO E FABRICACAO DE DERIVADOS',
+        #                '15.53-9': 'FABRICACAO DE FARINHA DE MANDIOCA E DERIVADOS',
+        #                '15.54-7': 'FABRICACAO DE FARINHA DE MILHO E DERIVADOS',
+        #                '15.55-5': 'FABRICACAO DE AMIDOS E FECULAS DE VEGETAIS E FABRICACAO DE OLEOS DE MILHO',
+        #                '15.56-3': 'FABRICACAO DE RACOES BALANCEADAS PARA ANIMAIS',
+        #                '15.59-8': 'BENEFICIAMENTO, MOAGEM  E PREPARACAO DE OUTROS PRODUTOS DE ORIGEM VEGETAL',
+        #                '15.61-0': 'USINAS DE ACUCAR',
+        #                '15.62-8': 'REFINO E MOAGEM DE ACUCAR',
+        #                '15.71-7': 'TORREFACAO E MOAGEM DE CAFE',
+        #                '15.72-5': 'FABRICACAO DE CAFE SOLUVEL',
+        #                '15.81-4': 'FABRICACAO DE PRODUTOS DE PADARIA, CONFEITARIA E PASTELARIA',
+        #                '15.82-2': 'FABRICACAO DE BISCOITOS E BOLACHAS',
+        #                '15.83-0': 'PRODUCAO DE DERIVADOS DO CACAU E ELABORACAO DE CHOCOLATES, BALAS, GOMAS DE MASCAR',
+        #                '15.84-9': 'FABRICACAO DE MASSAS ALIMENTICIAS',
+        #                '15.85-7': 'PREPARACAO DE ESPECIARIAS, MOLHOS, TEMPEROS E CONDIMENTOS',
+        #                '15.86-5': 'PREPARACAO DE PRODUTOS  DIETETICOS, ALIMENTOS PARA CRIANCAS E OUTROS ALIMENTOS CONSERVADOS',
+        #                '15.89-0': 'FABRICACAO DE OUTROS PRODUTOS ALIMENTICIOS',
+        #                '15.91-1': 'FABRICACAO, RETIFICACAO, HOMOGENEIZACAO E MISTURA DE AGUARDENTES E OUTRAS BEBIDAS DESTILADAS',
+        #                '15.92-0': 'FABRICACAO DE VINHO',
+        #                '15.93-8': 'FABRICACAO DE MALTE, CERVEJAS E CHOPES',
+        #                '15.94-6': 'ENGARRAFAMENTO E GASEIFICACAO DE AGUAS MINERAIS',
+        #                '15.95-4': 'FABRICACAO DE REFRIGERANTES E REFRESCOS',
+        #                '16.00-4': 'FABRICACAO DE PRODUTOS DO FUMO',
+        #                '17.11-6': 'BENEFICIAMENTO DE ALGODAO',
+        #                '17.19-1': 'BENEFICIAMENTO DE OUTRAS FIBRAS TEXTEIS NATURAIS',
+        #                '17.21-3': 'FIACAO DE ALGODAO',
+        #                '17.22-1': 'FIACAO DE FIBRAS TEXTEIS NATURAIS, EXCETO ALGODAO',
+        #                '17.23-0': 'FIACAO DE FIBRAS ARTIFICIAIS OU SINTETICAS',
+        #                '17.24-8': 'FABRICACAO DE LINHAS E FIOS PARA COSTURAR E BORDAR',
+        #                '17.31-0': 'TECELAGEM DE ALGODAO',
+        #                '17.32-9': 'TECELAGEM DE FIOS DE FIBRAS TEXTEIS NATURAIS, EXCETO ALGODAO',
+        #                '17.33-7': 'TECELAGEM DE FIOS E FILAMENTOS CONTINUOS ARTIFICIAIS OU SINTETICOS',
+        #                '17.41-8': 'FABRICACAO DE ARTIGOS DE TECIDO DE USO DOMESTICO, INCLUINDO TECELAGEM',
+        #                '17.49-3': 'FABRICACAO DE OUTROS ARTEFATOS TEXTEIS, INCLUINDO TECELAGEM',
+        #                '17.50-7': 'ACABAMENTOS EM FIOS, TECIDOS E ARTIGOS TEXTEIS, POR TERCEIROS',
+        #                '17.61-2': 'FABRICACAO DE ARTEFATOS TEXTEIS A PARTIR DE TECIDOS – EXCETO VESTUARIO',
+        #                '17.62-0': 'FABRICACAO DE ARTEFATOS DE TAPECARIA',
+        #                '17.63-9': 'FABRICACAO DE ARTEFATOS DE CORDOARIA',
+        #                '17.64-7': 'FABRICACAO DE TECIDOS ESPECIAIS - INCLUSIVE ARTEFATOS',
+        #                '17.69-8': 'FABRICACAO DE OUTROS ARTIGOS TEXTEIS - EXCETO VESTUARIO',
+        #                '17.71-0': 'FABRICACAO DE TECIDOS DE MALHA',
+        #                '17.72-8': 'FABRICACAO DE MEIAS',
+        #                '17.79-5': 'FABRICACAO DE OUTROS ARTIGOS DO VESTUARIO PRODUZIDOS EM MALHARIAS (TRICOTAGENS)',
+        #                 '18.11-2':'CONFECCAO DE ROUPAS INTIMAS, BLUSAS, CAMISAS E SEMELHANTES',
+        #                 '18.12-0': 'CONFECCAO DE PECAS DO VESTUARIO - EXCETO ROUPAS INTIMAS, BLUSAS, CAMISAS  E SEMELHANTES',
+        #                 '18.13-9': 'CONFECCAO DE ROUPAS PROFISSIONAIS',
+        #                 '18.21-0': 'FABRICACAO DE ACESSORIOS DO VESTUARIO',
+        #                 '18.22-8': 'FABRICACAO DE ACESSORIOS PARA SEGURANCA INDUSTRIAL E PESSOAL',
+        #                 '19.10-0': 'CURTIMENTO E OUTRAS PREPARACOES DE COURO',
+        #                 '19.21-6': 'FABRICACAO DE MALAS, BOLSAS, VALISES E OUTROS ARTEFATOS PARA VIAGEM, DE QUALQUER MATERIAL',
+        #                 '19.29-1': 'FABRICACAO DE OUTROS ARTEFATOS DE COURO',
+        #                 '19.31-3': 'FABRICACAO DE CALCADOS DE COURO',
+        #                 '19.32-1': 'FABRICACAO DE TENIS DE QUALQUER MATERIAL',
+        #                 '19.33-0': 'FABRICACAO DE CALCADOS DE PLASTICO',
+        #                 '19.39-9': 'FABRICACAO DE CALCADOS DE OUTROS MATERIAIS',
+        #                 '20.10-9': 'DESDOBRAMENTO DE MADEIRA',
+        #                 '20.21-4': 'FABRICACAO DE MADEIRA LAMINADA E DE CHAPAS DE MADEIRA COMPENSADA, PRENSADA OU AGLOMERADA',
+        #                 '20.22-2': 'FABRICACAO DE ESQUADRIAS DE MADEIRA, DE CASAS DE MADEIRA PRE-FABRICADAS, DE ESTRUTURAS DE MADEIRA E ARTIGOS DE CARPINTARIA',
+        #                 '20.23-0': 'FABRICACAO DE ARTEFATOS DE TANOARIA E EMBALAGENS DE MADEIRA',
+        #                 '20.29-0': 'FABRICACAO DE ARTEFATOS DIVERSOS DE MADEIRA, PALHA, CORTICA E MATERIAL TRANCADO - EXCETO MOVEIS',
+        #                 '21.10-5': 'FABRICACAO DE CELULOSE E OUTRAS PASTAS PARA A FABRICACAO DE PAPEL',
+        #                 '21.21-0': 'FABRICACAO DE PAPEL',
+        #                 '21.22-9': 'FABRICACAO DE PAPELAO LISO, CARTOLINA E CARTAO',
+        #                 '21.31-8': 'FABRICACAO DE EMBALAGENS DE PAPEL',
+        #                 '21.32-6': 'FABRICACAO DE EMBALAGENS  DE PAPELAO - INCLUSIVE A FABRICACAO DE PAPELAO CORRUGADO',
+        #                 '21.41-5': 'FABRICACAO DE ARTEFATOS DE PAPEL, PAPELAO, CARTOLINA E CARTAO PARA ESCRITORIO',
+        #                 '21.42-3': 'FABRICACAO DE FITAS E FORMULARIOS CONTINUOS - IMPRESSOS OU NAO',
+        #                 '21.49-0': 'FABRICACAO DE OUTROS ARTEFATOS DE PASTAS, PAPEL, PAPELAO, CARTOLINA E CARTAO',
+        #                 '22.14-4': 'EDICAO DE DISCOS, FITAS E OUTROS MATERIAIS GRAVADOS',
+        #                 '22.15-2': 'EDICAO DE LIVROS, REVISTAS E JORNAIS',
+        #                 '22.16-0': 'EDICAO E IMPRESSAO DE LIVROS',
+        #                 '22.17-9': 'EDICAO E IMPRESSAO DE JORNAIS',
+        #                 '22.18-7': 'EDICAO E IMPRESSAO DE REVISTAS',
+        #                 '22.19-5': 'EDICAO; EDICAO E IMPRESSAO DE OUTROS PRODUTOS GRAFICOS',
+        #                 '22.21-7': 'IMPRESSAO DE JORNAIS, REVISTAS E LIVROS',
+        #                 '22.22-5': 'IMPRESSAO DE MATERIAL ESCOLAR  E DE MATERIAL PARA USOS INDUSTRIAL E COMERCIAL',
+        #                 '22.29-2 ': 'EXECUCAO DE OUTROS SERVICOS GRAFICOS',
+        #                 '22.31-4': 'REPRODUCAO DE DISCOS E FITAS',
+        #                 '22.32-2': 'REPRODUCAO DE FITAS DE VIDEOS',
+        #                 '22.34-9': 'REPRODUCAO DE SOFTWARES EM DISQUETES E FITAS',
+        #                 '23.10-8': 'COQUERIAS',
+        #                 '23.21-3': 'REFINO DE PETROLEO',
+        #                 '23.29-9': 'OUTRAS FORMAS DE PRODUCAO DE DERIVADOS DO PETROLEO',
+        #                 '23.30-2': 'ELABORACAO DE COMBUSTIVEIS NUCLEARES',
+        #                 '23.40-0': 'PRODUCAO DE ALCOOL',
+        #                 '24.11-2': 'FABRICACAO DE CLORO E ALCALIS',
+        #                 '24.12-0': 'FABRICACAO DE INTERMEDIARIOS PARA FERTILIZANTES',
+        #                 '24.13-9': 'FABRICACAO DE FERTILIZANTES FOSFATADOS, NITROGENADOS E POTASSICOS',
+        #                 '24.14-7': 'FABRICACAO DE GASES INDUSTRIAIS',
+        #                 '24.19-8': 'FABRICACAO DE OUTROS PRODUTOS INORGÂNICOS',
+        #                 '24.21-0': 'FABRICACAO DE PRODUTOS PETROQUIMICOS BASICOS',
+        #                 '24.22-8': 'FABRICACAO DE INTERMEDIARIOS PARA RESINAS E FIBRAS',
+        #                 '24.29-5': 'FABRICACAO DE OUTROS PRODUTOS QUIMICOS ORGÂNICOS',
+        #                 '24.31-7': 'FABRICACAO DE RESINAS TERMOPLASTICAS',
+        #                 '24.32-5': 'FABRICACAO DE RESINAS TERMOFIXAS',
+        #                 '24.33-3': 'FABRICACAO DE ELASTOMEROS',
+        #                 '24.41-4': 'FABRICACAO DE FIBRAS, FIOS, CABOS E FILAMENTOS CONTINUOS ARTIFICIAIS',
+        #                 '24.42-2': 'FABRICACAO DE FIBRAS, FIOS, CABOS E FILAMENTOS CONTINUOS SINTETICOS',
+        #                 '24.51-1': 'FABRICACAO DE PRODUTOS FARMOQUIMICOS',
+        #                 '24.52-0': 'FABRICACAO DE MEDICAMENTOS PARA USO HUMANO',
+        #                 '24.53-8': 'FABRICACAO DE MEDICAMENTOS PARA USO VETERINARIO',
+        #                 '24.54-6': 'FABRICACAO DE MATERIAIS PARA USOS MEDICOS, HOSPITALARES E ODONTOLOGICOS',
+        #                 '24.61-9': 'FABRICACAO DE INSETICIDAS',
+        #                 '24.62-7': 'FABRICACAO DE FUNGICIDAS',
+        #                 '24.63-5': 'FABRICACAO DE HERBICIDAS',
+        #                 '24.69-4': 'FABRICACAO DE OUTROS DEFENSIVOS AGRICOLAS',
+        #                 '24.71-6': 'FABRICACAO DE SABOES, SABONETES E DETERGENTES SINTETICOS',
+        #                 '24.72-4': 'FABRICACAO DE PRODUTOS DE LIMPEZA E POLIMENTO',
+        #                 '24.73-2': 'FABRICACAO DE ARTIGOS DE PERFUMARIA E COSMETICOS',
+        #                 '24.81-3': 'FABRICACAO DE TINTAS, VERNIZES, ESMALTES E LACAS',
+        #                 '24.82-1': 'FABRICACAO DE TINTAS DE IMPRESSAO',
+        #                 '24.83-0': 'FABRICACAO DE IMPERMEABILIZANTES, SOLVENTES E PRODUTOS AFINS',
+        #                 '24.91-0': 'FABRICACAO DE ADESIVOS E SELANTES',
+        #                 '24.92-9': 'FABRICACAO DE EXPLOSIVOS',
+        #                 '24.93-7': 'FABRICACAO DE CATALISADORES',
+        #                 '24.94-5': 'FABRICACAO DE ADITIVOS DE USO INDUSTRIAL',
+        #                 '24.95-3': 'FABRICACAO DE CHAPAS, FILMES, PAPEIS E OUTROS MATERIAIS E PRODUTOS QUIMICOS PARA FOTOGRAFIA',
+        #                 '24.96-1': 'FABRICACAO DE DISCOS E FITAS VIRGENS',
+        #                 '24.99-6': 'FABRICACAO DE OUTROS PRODUTOS QUIMICOS NAO ESPECIFICADOS ANTERIORMENTE',
+        #                 '25.11-9': 'FABRICACAO DE PNEUMATICOS E DE CÂMARAS-DE-AR',
+        #                 '25.12-7': 'RECONDICIONAMENTO DE PNEUMATICOS',
+        #                 '25.19-4': 'FABRICACAO DE ARTEFATOS DIVERSOS DE BORRACHA',
+        #                 '25.21-6': 'FABRICACAO DE LAMINADOS PLANOS E TUBULARES DE PLASTICO',
+        #                 '25.22-4': 'FABRICACAO DE EMBALAGEM DE PLASTICO',
+        #                 '25.29-1': 'FABRICACAO DE ARTEFATOS DIVERSOS DE PLASTICO',
+        #                 '26.11-5': 'FABRICACAO DE VIDRO PLANO E DE SEGURANCA',
+        #                 '26.12-3': 'FABRICACAO DE EMBALAGENS DE VIDRO',
+        #                 '26.19-0': 'FABRICACAO DE ARTIGOS DE VIDRO',
+        #                 '26.20-4': 'FABRICACAO DE CIMENTO',
+        #                 '26.30-1': 'FABRICACAO DE ARTEFATOS DE CONCRETO, CIMENTO, FIBROCIMENTO, GESSO E ESTUQUE',
+        #                 '26.41-7': 'FABRICACAO DE PRODUTOS CERÂMICOS NAO-REFRATARIOS PARA USO ESTRUTURAL NA CONSTRUCAO CIVIL',
+        #                 '26.42-5': 'FABRICACAO DE PRODUTOS CERÂMICOS REFRATARIOS',
+        #                 '26.49-2': 'FABRICACAO DE PRODUTOS CERÂMICOS NAO-REFRATARIOS PARA USOS DIVERSOS',
+        #                 '26.91-3': 'BRITAMENTO, APARELHAMENTO E OUTROS TRABALHOS EM PEDRAS (NAO ASSOCIADOS A EXTRACAO)',
+        #                 '26.92-1': 'FABRICACAO DE CAL VIRGEM, CAL HIDRATADA E GESSO',
+        #                 '26.99-9': 'FABRICACAO DE OUTROS PRODUTOS DE MINERAIS NAO-METALICOS',
+        #                 '27.13-8': 'PRODUCAO DE FERRO-GUSA',
+        #                 '27.14-6': 'PRODUCAO DE FERROLIGAS',
+        #                 '27.23-5': 'PRODUCAO DE SEMI-ACABADOS DE ACO',
+        #                 '27.24-3': 'PRODUCAO DE LAMINADOS PLANOS DE ACO',
+        #                 '27.25-1': 'PRODUCAO DE LAMINADOS LONGOS DE ACO',
+        #                 '27.26-0': 'PRODUCAO DE RELAMINADOS, TREFILADOS E PERFILADOS DE ACO',
+        #                 '27.31-6': 'FABRICACAO DE TUBOS DE ACO COM COSTURA',
+        #                 '27.39-1': 'FABRICACAO DE OUTROS TUBOS DE FERRO E ACO',
+        #                 '27.41-3': 'METALURGIA DO ALUMINIO E SUAS LIGAS',
+        #                 '27.42-1': 'METALURGIA DOS METAIS PRECIOSOS',
+        #                 '27.49-9': 'METALURGIA DE OUTROS METAIS NAO-FERROSOS E SUAS LIGAS',
+        #                 '27.51-0': 'FABRICACAO DE PECAS FUNDIDAS DE FERRO E ACO',
+        #                 '27.52-9': 'FABRICACAO DE PECAS FUNDIDAS DE METAIS NAO-FERROSOS E SUAS LIGAS',
+        #                 '28.11-8': 'FABRICACAO DE ESTRUTURAS METALICAS PARA EDIFICIOS, PONTES, TORRES DE TRANSMISSAO, ANDAIMES E OUTROS FINS',
+        #                 '28.12-6': 'FABRICACAO DE ESQUADRIAS DE METAL',
+        #                 '28.13-4': 'FABRICACAO DE OBRAS DE CALDEIRARIA PESADA',
+        #                 '28.21-5': 'FABRICACAO DE TANQUES, RESERVATORIOS METALICOS E CALDEIRAS PARA AQUECIMENTO CENTRAL',
+        #                 '28.22-3': 'FABRICACAO DE CALDEIRAS GERADORAS DE VAPOR - EXCETO PARA AQUECIMENTO CENTRAL E PARA VEICULOS',
+        #                 '28.31-2': 'PRODUCAO DE FORJADOS DE ACO',
+        #                 '28.32-0': 'PRODUCAO DE FORJADOS DE METAIS NAO-FERROSOS E SUAS LIGAS',
+        #                 '28.33-9': 'FABRICACAO DE ARTEFATOS ESTAMPADOS DE METAL',
+        #                 '28.34-7': 'METALURGIA DO PO',
+        #                 '28.39-8': 'TEMPERA, CEMENTACAO E TRATAMENTO TERMICO DO ACO, SERVICOS DE USINAGEM, GALVANOTECNICA E SOLDA',
+        #                 '28.41-0': 'FABRICACAO DE ARTIGOS DE CUTELARIA',
+        #                 '28.42-8': 'FABRICACAO DE ARTIGOS DE SERRALHERIA - EXCETO ESQUADRIAS',
+        #                 '28.43-6': 'FABRICACAO DE FERRAMENTAS MANUAIS',
+        #                 '28.81-9': 'MANUTENCAO E REPARACAO DE TANQUES, RESERVATORIOS METALICOS E CALDEIRAS PARA AQUECIMENTO CENTRAL ',
+        #                 '28.82-7': 'MANUTENCAO E REPARACAO DE CALDEIRAS GERADORAS DE VAPOR - EXCETO PARA AQUECIMENTO CENTRAL E PARA VEICULOS',
+        #                 '28.91-6': 'FABRICACAO DE EMBALAGENS METALICAS',
+        #                 '28.92-4': 'FABRICACAO DE ARTEFATOS DE TREFILADOS',
+        #                 '28.93-2': 'FABRICACAO DE ARTIGOS DE FUNILARIA E DE ARTIGOS DE METAL PARA USOS DOMESTICO E PESSOAL',
+        #                 '28.99-1': 'FABRICACAO DE OUTROS PRODUTOS ELABORADOS DE METAL',
+        #                 '29.11-4': 'FABRICACAO DE MOTORES ESTACIONARIOS DE COMBUSTAO INTERNA, TURBINAS E OUTRAS MAQUINAS MOTRIZES NAO-ELETRICAS - EXCETO PARA AVIOES E VEICULOS RODOVIARIOS',
+        #                 '29.12-2': 'FABRICACAO DE BOMBAS E CARNEIROS HIDRAULICOS',
+        #                 '29.13-0': 'FABRICACAO DE VALVULAS, TORNEIRAS E REGISTROS',
+        #                 '29.14-9': 'FABRICACAO DE COMPRESSORES',
+        #                 '29.15-7': 'FABRICACAO DE EQUIPAMENTOS DE TRANSMISSAO PARA FINS INDUSTRIAIS - INCLUSIVE ROLAMENTOS',
+        #                 '29.21-1': 'FABRICACAO DE FORNOS INDUSTRIAIS, APARELHOS E EQUIPAMENTOS NAO-ELETRICOS PARA INSTALACOES TERMICAS',
+        #                 '29.22-0': 'FABRICACAO DE ESTUFAS E FORNOS ELETRICOS PARA FINS INDUSTRIAIS',
+        #                 '29.23-8': 'FABRICACAO DE MAQUINAS, EQUIPAMENTOS E APARELHOS PARA TRANSPORTE E ELEVACAO DE CARGAS E PESSOAS',
+        #                 '29.24-6': 'FABRICACAO DE MAQUINAS E APARELHOS DE REFRIGERACAO E VENTILACAO DE USOS INDUSTRIAL E COMERCIAL',
+        #                 '29.25-4': 'FABRICACAO DE APARELHOS DE AR-CONDICIONADO',
+        #                 '29.29-7': 'FABRICACAO DE OUTRAS MAQUINAS E EQUIPAMENTOS DE USO GERAL',
+        #                 '29.31-9': 'FABRICACAO DE MAQUINAS E EQUIPAMENTOS PARA AGRICULTURA, AVICULTURA E OBTENCAO DE PRODUTOS ANIMAIS',
+        #                 '29.32-7': 'FABRICACAO DE TRATORES AGRICOLAS',
+        #                 '29.40-8': 'FABRICACAO DE MAQUINAS-FERRAMENTA',
+        #                 '29.51-3': 'FABRICACAO DE MAQUINAS E EQUIPAMENTOS PARA A PROSPECCAO E EXTRACAO DE PETROLEO',
+        #                 '29.52-1': 'FABRICACAO DE OUTRAS MAQUINAS E EQUIPAMENTOS DE USO NA EXTRACAO MINERAL E CONSTRUCAO ',
+        #                 '29.53-0': 'FABRICACAO DE TRATORES DE ESTEIRA E TRATORES DE USO NA EXTRACAO MINERAL E CONSTRUCAO',
+        #                 '29.54-8': 'FABRICACAO DE MAQUINAS E EQUIPAMENTOS DE TERRAPLENAGEM E PAVIMENTACAO',
+        #                 '29.61-0': 'FABRICACAO DE MAQUINAS PARA A INDUSTRIA METALURGICA - EXCETO MAQUINAS-FERRAMENTA',
+        #                 '29.62-9': 'FABRICACAO DE MAQUINAS E EQUIPAMENTOS PARA AS INDUSTRIAS ALIMENTAR, DE BEBIDA E FUMO',
+        #                 '29.63-7': 'FABRICACAO DE MAQUINAS E EQUIPAMENTOS PARA A INDUSTRIA TEXTIL',
+        #                 '29.64-5': 'FABRICACAO DE MAQUINAS E EQUIPAMENTOS PARA AS INDUSTRIAS DO  VESTUARIO E DE COURO E CALCADOS',
+        #                 '29.65-3': 'FABRICACAO DE MAQUINAS E EQUIPAMENTOS PARA AS INDUSTRIAS DE CELULOSE, PAPEL E PAPELAO E ARTEFATOS',
+        #                 '29.69-6': 'FABRICACAO DE OUTRAS MAQUINAS E EQUIPAMENTOS DE USO ESPECIFICO',
+        #                 '29.71-8': 'FABRICACAO DE ARMAS DE FOGO E MUNICOES',
+        #                 '29.72-6': 'FABRICACAO DE EQUIPAMENTO BELICO PESADO',
+        #                 '29.81-5': 'FABRICACAO DE FOGOES, REFRIGERADORES E MAQUINAS DE LAVAR E SECAR PARA USO DOMESTICO',
+        #                 '29.89-0': 'FABRICACAO DE OUTROS APARELHOS ELETRODOMESTICOS',
+        #                 '29.91-2': 'MANUTENCAO E REPARACAO DE MOTORES, BOMBAS, COMPRESSORES E EQUIPAMENTOS DE TRANSMISSAO',
+        #                 '29.92-0': 'MANUTENCAO E REPARACAO DE MAQUINAS E EQUIPAMENTOS DE USO GERAL',
+        #                 '29.93-9': 'MANUTENCAO E REPARACAO DE TRATORES E DE MAQUINAS E EQUIPAMENTOS PARA AGRICULUTRA, AVICULTURA E OBTENCAO DE PRODUTOS ANIMAIS',
+        #                 '29.94-7': 'MANUTENCAO E REPARACAO DE MAQUINAS-FERRAMENTA',
+        #                 '29.95-5': 'MANUTENCAO E REPARACAO DE MAQUINAS E EQUIPAMENTOS DE USO NA EXTRACAO MINERAL E CONSTRUCAO',
+        #                 '29.96-3': 'MANUTENCAO E REPARACAO DE MAQUINAS E EQUIPAMENTOS DE USO ESPECIFICO',
+        #                 '30.11-2': 'FABRICACAO DE MAQUINAS DE ESCREVER E CALCULAR, COPIADORAS E OUTROS EQUIPAMENTOS NAO-ELETRONICOS PARA ESCRITORIO',
+        #                 '30.12-0': 'FABRICACAO DE MAQUINAS DE ESCREVER E CALCULAR, COPIADORAS E OUTROS EQUIPAMENTOS ELETRONICOS DESTINADOS A AUTOMACAO GERENCIAL E COMERCIAL',
+        #                 '30.21-0': 'FABRICACAO DE COMPUTADORES',
+        #                 '30.22-8': 'FABRICACAO DE EQUIPAMENTOS PERIFERICOS PARA MAQUINAS ELETRONICAS PARA TRATAMENTO DE INFORMACOES',
+        #                 '31.11-9': 'FABRICACAO DE GERADORES DE CORRENTE CONTINUA OU ALTERNADA',
+        #                 '31.12-7': 'FABRICACAO DE TRANSFORMADORES, INDUTORES, CONVERSORES, SINCRONIZADORES E SEMELHANTES',
+        #                 '31.13-5': 'FABRICACAO DE MOTORES ELETRICOS',
+        #                 '31.21-6': 'FABRICACAO DE SUBESTACOES, QUADROS DE COMANDO, REGULADORES DE VOLTAGEM E OUTROS APARELHOS E EQUIPAMENTOS PARA DISTRIBUICAO E CONTROLE DE ENERGIA ELETRICA',
+        #                 '31.22-4': 'FABRICACAO DE MATERIAL ELETRICO PARA INSTALACOES EM CIRCUITO DE CONSUMO',
+        #                 '31.30-5': 'FABRICACAO DE FIOS, CABOS E CONDUTORES ELETRICOS ISOLADOS',
+        #                 '31.41-0': 'FABRICACAO DE PILHAS, BATERIAS E ACUMULADORES ELETRICOS - EXCETO PARA VEICULOS',
+        #                 '31.42-9': 'FABRICACAO DE BATERIAS E ACUMULADORES PARA VEICULOS',
+        #                 '31.51-8': 'FABRICACAO DE LÂMPADAS',
+        #                 '31.52-6': 'FABRICACAO DE LUMINARIAS E EQUIPAMENTOS DE ILUMINACAO - EXCETO PARA VEICULOS',
+        #                 '31.60-7': 'FABRICACAO DE MATERIAL ELETRICO PARA VEICULOS - EXCETO BATERIAS',
+        #                 '31.81-0': 'MANUTENCAO E REPARACAO DE GERADORES, TRANSFORMADORES E MOTORES ELETRICOS',
+        #                 '31.82-8': 'MANUTENCAO E REPARACAO DE BATERIAS E ACUMULADORES ELETRICOS - EXCETO PARA VEICULOS',
+        #                 '31.89-5': 'MANUTENCAO E REPARACAO DE MAQUINAS, APARELHOS E MATERIAIS ELETRICOS NAO ESPECIFICADOS ANTERIORMENTE',
+        #                 '31.91-7': 'FABRICACAO DE ELETRODOS, CONTATOS E OUTROS ARTIGOS DE CARVAO E GRAFITA PARA USO ELETRICO, ELETROIMAS E ISOLADORES',
+        #                 '31.92-5': 'FABRICACAO DE APARELHOS E UTENSILIOS PARA SINALIZACAO E ALARME',
+        #                 '31.99-2': 'FABRICACAO DE OUTROS APARELHOS OU EQUIPAMENTOS ELETRICOS',
+        #                 '32.10-7': 'FABRICACAO DE MATERIAL ELETRONICO BASICO',
+        #                 '32.21-2': 'FABRICACAO DE EQUIPAMENTOS TRANSMISSORES DE RADIO E TELEVISAO E DE EQUIPAMENTOS PARA ESTACOES TELEFONICAS, PARA RADIOTELEFONIA E RADIOTELEGRAFIA - INCLUSIVE DE MICROONDAS E REPETIDORAS',
+        #                 '32.22-0': 'FABRICACAO DE APARELHOS TELEFONICOS, SISTEMAS DE INTERCOMUNICACAO E SEMELHANTES',
+        #                 '32.30-1': 'FABRICACAO DE APARELHOS RECEPTORES DE RADIO E TELEVISAO E DE REPRODUCAO, GRAVACAO OU AMPLIFICACAO DE SOM E VIDEO',
+        #                 '32.90-5': 'MANUTENCAO E REPARACAO DE APARELHOS E EQUIPAMENTOS DE TELEFONIA E RADIOTELEFONIA E DE TRANSMISSORES DE TELEVISAO E RADIO - EXCETO TELEFONES',
+        #                 '33.10-3': 'FABRICACAO DE APARELHOS E INSTRUMENTOS PARA USOS MEDICO-HOSPITALARES, ODONTOLOGICOS E DE LABORATORIOS E APARELHOS ORTOPEDICOS',
+        #                 '33.20-0': 'FABRICACAO DE APARELHOS E INSTRUMENTOS DE MEDIDA, TESTE E CONTROLE - EXCETO EQUIPAMENTOS PARA CONTROLE DE PROCESSOS INDUSTRIAIS',
+        #                 '33.30-8': 'FABRICACAO DE MAQUINAS, APARELHOS E EQUIPAMENTOS DE SISTEMAS ELETRONICOS DEDICADOS A AUTOMACAO INDUSTRIAL E CONTROLE DO PROCESSO PRODUTIVO',
+        #                 '33.40-5': 'FABRICACAO DE APARELHOS, INSTRUMENTOS E MATERIAIS OPTICOS, FOTOGRAFICOS E CINEMATOGRAFICOS',
+        #                 '33.50-2': 'FABRICACAO DE CRONOMETROS E RELOGIOS',
+        #                 '33.91-0': 'MANUTENCAO E REPARACAO DE EQUIPAMENTOS MEDICO-HOSPITALARES, ODONTOLOGICOS E DE LABORATORIO',
+        #                 '33.92-8': 'MANUTENCAO E REPARACAO DE APARELHOS E INSTRUMENTOS DE MEDIDA, TESTE E CONTROLE - EXCETO EQUIPAMENTOS DE CONTROLE DE PROCESSOS INDUSTRIAIS',
+        #                 '33.93-6': 'MANUTENCAO E REPARACAO DE MAQUINAS, APARELHOS E EQUIPAMENTOS DE SISTEMAS ELETRONICOS DEDICADOS A AUTOMACAO INDUSTRIAL E CONTROLE DO PROCESSO PRODUTIVO',
+        #                 '33.94-4': 'MANUTENCAO E REPARACAO DE INSTRUMENTOS OPTICOS E CINEMATOGRAFICOS',
+        #                 '34.10-0': 'FABRICACAO DE AUTOMOVEIS, CAMIONETAS E UTILITARIOS',
+        #                 '34.20-7': 'FABRICACAO DE CAMINHOES E ONIBUS',
+        #                 '34.31-2': 'FABRICACAO DE CABINES, CARROCERIAS E REBOQUES PARA CAMINHAO ',
+        #                 '34.32-0': 'FABRICACAO DE CARROCERIAS PARA ONIBUS',
+        #                 '34.39-8': 'FABRICACAO DE CABINES, CARROCERIAS E REBOQUES PARA OUTROS VEICULOS',
+        #                 '34.41-0': 'FABRICACAO DE PECAS E ACESSORIOS PARA O SISTEMA MOTOR',
+        #                 '34.42-8': 'FABRICACAO DE PECAS E ACESSORIOS PARA OS SISTEMAS DE MARCHA E TRANSMISSAO',
+        #                 '34.43-6': 'FABRICACAO DE PECAS E ACESSORIOS PARA O SISTEMA DE FREIOS',
+        #                 '34.44-4': 'FABRICACAO DE PECAS E ACESSORIOS PARA O SISTEMA DE DIRECAO E SUSPENSAO',
+        #                 '34.49-5': 'FABRICACAO DE OUTRAS PECAS E ACESSORIOS PARA VEICULOS AUTOMOTORES NAO ESPECIFICADAS ANTERIORMENTE',
+        #                 '34.50-9': 'RECONDICIONAMENTO OU RECUPERACAO DE MOTORES PARA VEICULOS AUTOMOTORES',
+        #                 '35.11-4': 'CONSTRUCAO E REPARACAO DE EMBARCACOES E ESTRUTURAS FLUTUANTES',
+        #                 '35.12-2': 'CONSTRUCAO E REPARACAO DE EMBARCACOES PARA ESPORTE E LAZER',
+        #                 '35.21-1': 'CONSTRUCAO E MONTAGEM DE LOCOMOTIVAS, VAGOES E OUTROS MATERIAIS RODANTES',
+        #                 '35.22-0': 'FABRICACAO DE PECAS E ACESSORIOS PARA VEICULOS FERROVIARIOS',
+        #                 '35.23-8': 'REPARACAO DE VEICULOS FERROVIARIOS',
+        #                 '35.31-9': 'CONSTRUCAO E MONTAGEM DE AERONAVES',
+        #                 '35.32-7': 'REPARACAO DE AERONAVES',
+        #                 '35.91-2': 'FABRICACAO DE MOTOCICLETAS',
+        #                 '35.92-0': 'FABRICACAO DE BICICLETAS E TRICICLOS NAO-MOTORIZADOS',
+        #                 '35.99-8': 'FABRICACAO DE OUTROS EQUIPAMENTOS DE TRANSPORTE',
+        #                 '36.11-0': 'FABRICACAO DE MOVEIS COM PREDOMINÂNCIA DE MADEIRA',
+        #                 '36.12-9': 'FABRICACAO DE MOVEIS COM PREDOMINÂNCIA DE METAL',
+        #                 '36.13-7': 'FABRICACAO DE MOVEIS DE OUTROS MATERIAIS',
+        #                 '36.14-5': 'FABRICACAO DE COLCHOES',
+        #                 '36.91-9': 'LAPIDACAO DE PEDRAS PRECIOSAS E SEMI-PRECIOSAS, FABRICACAO DE ARTEFATOS DE OURIVESARIA E JOALHERIA',
+        #                 '36.92-7': 'FABRICACAO DE INSTRUMENTOS MUSICAIS',
+        #                 '36.93-5': 'FABRICACAO DE ARTEFATOS PARA CACA, PESCA E ESPORTE',
+        #                 '36.94-3': 'FABRICACAO DE BRINQUEDOS E DE JOGOS RECREATIVOS',
+        #                 '36.95-1': 'FABRICACAO DE CANETAS, LAPIS, FITAS IMPRESSORAS PARA MAQUINAS E OUTROS ARTIGOS PARA ESCRITORIO',
+        #                 '36.96-0': 'FABRICACAO DE AVIAMENTOS PARA COSTURA',
+        #                 '36.97-8': 'FABRICACAO DE ESCOVAS, PINCEIS E VASSOURAS',
+        #                 '36.99-4': 'FABRICACAO DE PRODUTOS DIVERSOS',
+        #                 '37.10-9': 'RECICLAGEM DE SUCATAS METALICAS',
+        #                 '37.20-6': 'RECICLAGEM DE SUCATAS NAO-METALICAS',
+        #                 '40.11-8': 'PRODUCAO DE ENERGIA ELETRICA',
+        #                 '40.12-6': 'TRANSMISSAO DE ENERGIA ELETRICA',
+        #                 '40.13-4': 'COMERCIO ATACADISTA DE ENERGIA ELETRICA',
+        #                 '40.14-2': 'DISTRIBUICAO DE ENERGIA ELETRICA',
+        #                 '40.20-7': 'PRODUCAO E DISTRIBUICAO DE GAS ATRAVES DE TUBULACOES',
+        #                 '40.30-4': 'PRODUCAO E DISTRIBUICAO DE VAPOR E AGUA QUENTE',
+        #                 '41.00-9': 'CAPTACAO, TRATAMENTO E DISTRIBUICAO DE AGUA',
+        #                 '45.11-0': 'DEMOLICAO E PREPARACAO DO TERRENO',
+        #                 '45.12-8': 'SONDAGENS E FUNDACOES DESTINADAS A CONSTRUCAO',
+        #                 '45.13-6': 'GRANDES MOVIMENTACOES DE TERRA',
+        #                 '45.21-7': 'EDIFICACOES (RESIDENCIAIS, INDUSTRIAIS, COMERCIAIS E DE SERVICOS)',
+        #                 '45.22-5': 'OBRAS VIARIAS',
+        #                 '45.23-3': 'OBRAS DE ARTE ESPECIAIS',
+        #                 '45.25-0': 'OBRAS DE MONTAGEM',
+        #                 '45.29-2': 'OBRAS DE OUTROS TIPOS',
+        #                 '45.31-4': 'OBRAS PARA GERACAO E DISTRIBUICAO DE ENERGIA ELETRICA',
+        #                 '45.33-0': 'OBRAS PARA TELECOMUNICACOES',
+        #                 '45.41-1': 'INSTALACOES ELETRICAS',
+        #                 '45.42-0': 'INSTALACOES DE SISTEMAS DE AR CONDICIONADO, DE VENTILACAO E REFRIGERACAO',
+        #                 '45.43-8': 'INSTALACOES HIDRAULICAS, SANITARIAS, DE GAS E DE SISTEMA DE PREVENCAO CONTRA INCENDIO',
+        #                 '45.49-7': 'OUTRAS OBRAS DE INSTALACOES',
+        #                 '45.50-0': 'OBRAS DE ACABAMENTO',
+        #                 '45.60-8': 'ALUGUEL DE EQUIPAMENTOS DE CONSTRUCAO E DEMOLICAO COM OPERARIOS',
+        #                 '50.10-5': 'COMERCIO A VAREJO E POR ATACADO DE VEICULOS AUTOMOTORES',
+        #                 '50.20-2': 'MANUTENCAO E REPARACAO DE VEICULOS AUTOMOTORES',
+        #                 '50.30-0': 'COMERCIO A VAREJO E POR ATACADO DE PECAS E ACESSORIOS PARA VEICULOS AUTOMOTORES',
+        #                 '50.41-5': 'COMERCIO A VAREJO E POR ATACADO DE MOTOCICLETAS, PARTES, PECAS E ACESSORIOS',
+        #                 '50.42-3': 'MANUTENCAO E REPARACAO DE MOTOCICLETAS',
+        #                 '50.50-4': 'COMERCIO A VAREJO DE COMBUSTIVEIS',
+        #                 '51.11-0': 'REPRESENTANTES COMERCIAIS E AGENTES DO COMERCIO DE MATERIAS-PRIMAS AGRICOLAS, ANIMAIS VIVOS, MATERIAS PRIMAS TEXTEIS E PRODUTOS SEMI-ACABADOS',
+        #                 '51.12-8': 'REPRESENTANTES COMERCIAIS E AGENTES DO COMERCIO DE COMBUSTIVEIS, MINERAIS, METAIS E PRODUTOS QUIMICOS INDUSTRIAIS',
+        #                 '51.13-6': 'REPRESENTANTES COMERCIAIS E AGENTES DO COMERCIO DE MADEIRA, MATERIAL DE CONSTRUCAO E FERRAGENS',
+        #                 '51.14-4': 'REPRESENTANTES COMERCIAIS E AGENTES DO COMERCIO DE MAQUINAS, EQUIPAMENTOS INDUSTRIAIS, EMBARCACOES E AERONAVES',
+        #                 '51.15-2': 'REPRESENTANTES COMERCIAIS E AGENTES DO COMERCIO DE MOVEIS E ARTIGOS DE USO DOMESTICO',
+        #                 '51.16-0': 'REPRESENTANTES COMERCIAIS E AGENTES DO COMERCIO DE TEXTEIS, VESTUARIO, CALCADOS E ARTIGOS DE COURO',
+        #                 '51.17-9': 'REPRESENTANTES COMERCIAIS E AGENTES DO COMERCIO DE PRODUTOS ALIMENTICIOS, BEBIDAS E FUMO',
+        #                 '51.18-7': 'REPRESENTANTES COMERCIAIS E AGENTES DO COMERCIO ESPECIALIZADO EM PRODUTOS NAO ESPECIFICADOS ANTERIORMENTE',
+        #                 '51.19-5': 'REPRESENTANTES COMERCIAIS E AGENTES DO COMERCIO DE MERCADORIAS EM GERAL (NAO ESPECIALIZADOS)',
+        #                 '51.21-7': 'COMERCIO ATACADISTA DE MATERIAS PRIMAS AGRICOLAS E PRODUTOS SEMI-ACABADOS; PRODUTOS ALIMENTICIOS PARA ANIMAIS',
+        #                 '51.22-5': 'COMERCIO ATACADISTA DE ANIMAIS VIVOS',
+        #                 '51.31-4': 'COMERCIO ATACADISTA DE LEITE E PRODUTOS DO LEITE',
+        #                 '51.32-2': 'COMERCIO ATACADISTA DE CEREAIS BENEFICIADOS E LEGUMINOSAS, FARINHAS, AMIDOS E FECULAS',
+        #                 '51.33-0': 'COMERCIO ATACADISTA DE HORTIFRUTIGRANJEIROS',
+        #                 '51.34-9': 'COMERCIO ATACADISTA DE CARNES E PRODUTOS DA CARNE',
+        #                 '51.35-7': 'COMERCIO ATACADISTA DE PESCADOS',
+        #                 '51.36-5': 'COMERCIO ATACADISTA DE BEBIDAS',
+        #                 '51.37-3': 'COMERCIO ATACADISTA DE PRODUTOS DO FUMO',
+        #                 '51.39-0': 'COMERCIO ATACADISTA DE OUTROS PRODUTOS ALIMENTICIOS, NAO ESPECIFICADOS ANTERIORMENTE',
+        #                 '51.41-1': 'COMERCIO ATACADISTA DE FIOS TEXTEIS, TECIDOS, ARTEFATOS DE TECIDOS E DE ARMARINHO',
+        #                 '51.42-0': 'COMERCIO ATACADISTA DE ARTIGOS DO VESTUARIO E COMPLEMENTOS',
+        #                 '51.43-8': 'COMERCIO ATACADISTA DE CALCADOS',
+        #                 '51.44-6': 'COMERCIO ATACADISTA DE ELETRODOMESTICOS E OUTROS EQUIPAMENTOS DE USOS PESSOAL E DOMESTICO',
+        #                 '51.45-4': 'COMERCIO ATACADISTA DE PRODUTOS FARMACEUTICOS, MEDICOS, ORTOPEDICOS E ODONTOLOGICOS',
+        #                 '51.46-2': 'COMERCIO ATACADISTA DE COSMETICOS E PRODUTOS DE PERFUMARIA',
+        #                 '51.47-0': 'COMERCIO ATACADISTA DE ARTIGOS DE ESCRITORIO E DE PAPELARIA;  LIVROS, JORNAIS, E OUTRAS PUBLICACOES',
+        #                 '51.49-7': 'COMERCIO ATACADISTA DE OUTROS ARTIGOS DE USOS PESSOAL E DOMESTICO, NAO ESPECIFICADOS ANTERIORMENTE',
+        #                 '51.51-9': 'COMERCIO ATACADISTA DE COMBUSTIVEIS',
+        #                 '51.52-7': 'COMERCIO ATACADISTA DE PRODUTOS EXTRATIVOS DE ORIGEM MINERAL',
+        #                 '51.53-5': 'COMERCIO ATACADISTA DE MADEIRA, MATERIAL DE CONSTRUCAO, FERRAGENS E FERRAMENTAS',
+        #                 '51.54-3': 'COMERCIO ATACADISTA DE PRODUTOS QUIMICOS',
+        #                 '51.55-1': 'COMERCIO ATACADISTA DE RESIDUOS E SUCATAS',
+        #                 '51.59-4': 'COMERCIO ATACADISTA DE OUTROS PRODUTOS INTERMEDIARIOS NAO AGROPECUARIOS, NAO ESPECIFICADOS ANTERIORMENTE',
+        #                 '51.61-6': 'COMERCIO ATACADISTA DE MAQUINAS, APARELHOS E EQUIPAMENTOS PARA USO AGROPECUARIO',
+        #                 '51.64-0': 'COMERCIO ATACADISTA DE MAQUINAS E EQUIPAMENTOS PARA O COMERCIO E ESCRITORIO',
+        #                 '51.65-9': 'COMERCIO ATACADISTA DE COMPUTADORES,  EQUIPAMENTOS DE TELEFONIA E COMUNICACAO, PARTES E PECAS',
+        #                 '51.69-1': 'COMERCIO ATACADISTA DE MAQUINAS, APARELHOS E EQUIPAMENTOS PARA USOS INDUSTRIAL, TECNICO E PROFISSIONAL, E OUTROS USOS, NAO ESPECIFICADOS ANTERIORMENTE',
+        #                 '51.91-8': 'COMERCIO ATACADISTA DE MERCADORIAS EM GERAL (NAO ESPECIALIZADO)',
+        #                 '51.92-6': 'COMERCIO ATACADISTA ESPECIALIZADO EM MERCADORIAS NAO ESPECIFICADAS ANTERIORMENTE',
+        #                 '52.11-6': 'COMERCIO VAREJISTA DE MERCADORIAS EM GERAL, COM PREDOMINÂNCIA DE PRODUTOS ALIMENTICIOS, COM AREA DE VENDA SUPERIOR A 5000 METROS QUADRADOS - HIPERMERCADOS',
+        #                 '52.12-4': 'COMERCIO VAREJISTA DE MERCADORIAS EM GERAL, COM PREDOMINÂNCIA DE PRODUTOS ALIMENTICIOS, COM AREA DE VENDA ENTRE 300 E 5000 METROS QUADRADOS - SUPERMERCADOS',
+        #                 '52.13-2': 'COMERCIO VAREJISTA DE MERCADORIAS EM GERAL, COM PREDOMINÂNCIA DE PRODUTOS ALIMENTICIOS, COM AREA DE VENDA INFERIOR A 300 METROS QUADRADOS - EXCETO LOJAS DE CONVENIENCIA',
+        #                 '52.14-0': 'COMERCIO VAREJISTA DE MERCADORIAS EM GERAL, COM PREDOMINÂNCIA DE PRODUTOS ALIMENTICIOS INDUSTRIALIZADOS - LOJAS DE CONVENIENCIA',
+        #                 '52.15-9': 'COMERCIO VAREJISTA NAO ESPECIALIZADO, SEM PREDOMINÂNCIA DE PRODUTOS ALIMENTICIOS',
+        #                 '52.21-3': 'COMERCIO VAREJISTA DE PRODUTOS DE PADARIA, DE LATICINIO, FRIOS E CONSERVAS',
+        #                 '52.22-1': 'COMERCIO VAREJISTA DE BALAS, BOMBONS E SEMELHANTES',
+        #                 '52.23-0': 'COMERCIO VAREJISTA DE CARNES - ACOUGUES',
+        #                 '52.24-8': 'COMERCIO VAREJISTA DE BEBIDAS',
+        #                 '52.29-9': 'COMERCIO VAREJISTA DE OUTROS PRODUTOS ALIMENTICIOS NAO ESPECIFICADOS ANTERIORMENTE E DE PRODUTOS DO FUMO',
+        #                 '52.31-0': 'COMERCIO VAREJISTA DE TECIDOS E ARTIGOS DE ARMARINHO',
+        #                 '52.32-9': 'COMERCIO VAREJISTA DE ARTIGOS DO VESTUARIO E COMPLEMENTOS',
+        #                 '52.33-7': 'COMERCIO VAREJISTA DE CALCADOS, ARTIGOS DE COURO E VIAGEM',
+        #                 '52.41-8': 'COMERCIO VAREJISTA DE PRODUTOS FARMACEUTICOS, ARTIGOS MEDICOS E ORTOPEDICOS, DE PERFUMARIA E COSMETICOS',
+        #                 '52.42-6': 'COMERCIO VAREJISTA DE MAQUINAS E APARELHOS DE USOS DOMESTICO E PESSOAL, DISCOS E INSTRUMENTOS MUSICAIS',
+        #                 '52.43-4': 'COMERCIO VAREJISTA DE MOVEIS, ARTIGOS DE ILUMINACAO E OUTROS ARTIGOS PARA RESIDENCIA',
+        #                 '52.44-2': 'COMERCIO VAREJISTA DE MATERIAL DE CONSTRUCAO, FERRAGENS E FERRAMENTAS MANUAIS; VIDROS, ESPELHOS E VITRAIS; TINTAS E MADEIRAS',
+        #                 '52.45-0': 'COMERCIO VAREJISTA DE EQUIPAMENTOS E MATERIAIS PARA ESCRITORIO; INFORMATICA E COMUNICACAO, INCLUSIVE SUPRIMENTOS',
+        #                 '52.46-9': 'COMERCIO VAREJISTA DE LIVROS, JORNAIS, REVISTAS E PAPELARIA',
+        #                 '52.47-7': 'COMERCIO VAREJISTA DE GAS LIQUEFEITO DE PETROLEO (GLP)',
+        #                 '52.49-3': 'COMERCIO VAREJISTA DE OUTROS PRODUTOS NAO ESPECIFICADOS ANTERIORMENTE',
+        #                 '52.50-7': 'COMERCIO VAREJISTA DE ARTIGOS USADOS',
+        #                 '52.62-0': 'COMERCIO EM VIAS PUBLICAS, EXCETO EM QUIOSQUES FIXOS',
+        #                 '52.69-8': 'OUTROS TIPOS DE COMERCIO VAREJISTA',
+        #                 '52.71-0': 'REPARACAO E MANUTENCAO DE MAQUINAS E DE APARELHOS ELETRODOMESTICOS',
+        #                 '52.72-8': 'REPARACAO DE CALCADOS',
+        #                 '52.79-5': 'REPARACAO DE OUTROS OBJETOS PESSOAIS E DOMESTICOS',
+        #                 '55.13-1': 'ESTABELECIMENTOS HOTELEIROS',
+        #                 '55.19-0': 'OUTROS TIPOS DE ALOJAMENTO',
+        #                 '55.21-2': 'RESTAURANTES E ESTABELECIMENTOS DE BEBIDAS, COM SERVICO COMPLETO',
+        #                 '55.22-0': 'LANCHONETES E SIMILARES',
+        #                 '55.23-9': 'CANTINAS (SERVICOS DE ALIMENTACAO PRIVATIVOS)',
+        #                 '55.24-7': 'FORNECIMENTO DE COMIDA PREPARADA',
+        #                 '55.29-8': 'OUTROS SERVICOS DE ALIMENTACAO',
+        #                 '60.10-0': 'TRANSPORTE FERROVIARIO INTERURBANO',
+        #                 '60.21-6': 'TRANSPORTE FERROVIARIO DE PASSAGEIROS, URBANO',
+        #                 '60.22-4': 'TRANSPORTE METROVIARIO',
+        #                 '60.23-2': 'TRANSPORTE RODOVIARIO DE PASSAGEIROS, REGULAR, URBANO',
+        #                 '60.24-0': 'TRANSPORTE RODOVIARIO DE PASSAGEIROS, REGULAR, NAO URBANO',
+        #                 '60.25-9': 'TRANSPORTE RODOVIARIO DE PASSAGEIROS, NAO REGULAR',
+        #                 '60.26-7': 'TRANSPORTE RODOVIARIO DE CARGAS, EM GERAL',
+        #                 '60.27-5': 'TRANSPORTE RODOVIARIO DE PRODUTOS PERIGOSOS',
+        #                 '60.28-3': 'TRANSPORTE RODOVIARIO DE MUDANCAS',
+        #                 '60.29-1': 'TRANSPORTE REGULAR EM BONDES, FUNICULARES, TELEFERICOS OU TRENS PROPRIOS PARA EXPLORACAO DE PONTOS TURISTICOS',
+        #                 '60.30-5': 'TRANSPORTE DUTOVIARIO',
+        #                 '61.11-5': 'TRANSPORTE MARITIMO DE CABOTAGEM',
+        #                 '61.12-3': 'TRANSPORTE MARITIMO DE LONGO CURSO',
+        #                 '61.21-2': 'TRANSPORTE POR NAVEGACAO INTERIOR DE PASSAGEIROS',
+        #                 '61.22-0': 'TRANSPORTE POR NAVEGACAO INTERIOR DE CARGA',
+        #                 '61.23-9': 'TRANSPORTE AQUAVIARIO URBANO',
+        #                 '62.10-3': 'TRANSPORTE AEREO, REGULAR',
+        #                 '62.20-0': 'TRANSPORTE AEREO, NAO REGULAR',
+        #                 '62.30-8': 'TRANSPORTE ESPACIAL',
+        #                 '63.11-8': 'CARGA E DESCARGA',
+        #                 '63.12-6': 'ARMAZENAMENTO E DEPOSITOS DE CARGAS',
+        #                 '63.21-5': 'ATIVIDADES AUXILIARES DOS TRANSPORTES TERRESTRES',
+        #                 '63.22-3': 'ATIVIDADES AUXILIARES DOS TRANSPORTES AQUAVIARIOS',
+        #                 '63.23-1': 'ATIVIDADES AUXILIARES DOS TRANSPORTES AEREOS',
+        #                 '63.30-4': 'ATIVIDADES DE AGENCIAS DE VIAGENS E ORGANIZADORES DE VIAGEM',
+        #                 '63.40-1': 'ATIVIDADES RELACIONADAS A ORGANIZACAO DO TRANSPORTE DE CARGAS',
+        #                 '64.11-4': 'ATIVIDADES DE CORREIO NACIONAL',
+        #                 '64.12-2': 'ATIVIDADES DE MALOTE E ENTREGA',
+        #                 '64.20-3': 'TELECOMUNICACOES',
+        #                 '65.10-2': 'BANCO CENTRAL',
+        #                 '65.21-8': 'BANCOS COMERCIAIS',
+        #                 '65.22-6': 'BANCOS MULTIPLOS (COM CARTEIRA COMERCIAL)',
+        #                 '65.23-4': 'CAIXAS ECONOMICAS',
+        #                 '65.24-2': 'CREDITO COOPERATIVO ',
+        #                 '65.31-5': 'BANCOS MULTIPLOS (SEM CARTEIRA COMERCIAL)',
+        #                 '65.32-3': 'BANCOS DE INVESTIMENTO',
+        #                 '65.33-1': 'BANCOS DE DESENVOLVIMENTO',
+        #                 '65.34-0': 'CREDITO IMOBILIARIO',
+        #                 '65.35-8': 'SOCIEDADES DE CREDITO, FINANCIAMENTO E INVESTIMENTO',
+        #                 '65.40-4': 'ARRENDAMENTO MERCANTIL',
+        #                 '65.51-0': 'AGENCIAS DE FOMENTO',
+        #                 '65.59-5': 'OUTRAS ATIVIDADES DE CONCESSAO DE CREDITO',
+        #                 '65.91-9': 'FUNDOS DE INVESTIMENTO',
+        #                 '65.92-7': 'SOCIEDADES DE CAPITALIZACAO',
+        #                 '65.93-5': 'GESTAO DE ATIVOS INTANGIVEIS NAO FINANCEIROS',
+        #                 '65.99-4': 'OUTRAS ATIVIDADES DE INTERMEDIACAO FINANCEIRA, NAO ESPECIFICADAS ANTERIORMENTE',
+        #                 '66.11-7': 'SEGUROS DE VIDA',
+        #                 '66.12-5': 'SEGUROS NAO-VIDA',
+        #                 '66.13-3': 'RESSEGUROS',
+        #                 '66.21-4': 'PREVIDENCIA COMPLEMENTAR FECHADA',
+        #                 '66.22-2': 'PREVIDENCIA COMPLEMENTAR ABERTA',
+        #                 '66.30-3': 'PLANOS DE SAUDE',
+        #                 '67.11-3': 'ADMINISTRACAO DE MERCADOS BURSATEIS',
+        #                 '67.12-1': 'ATIVIDADES DE INTERMEDIARIOS EM TRANSACOES DE TITULOS E VALORES MOBILIARIOS',
+        #                 '67.19-9': 'OUTRAS ATIVIDADES AUXILIARES DA INTERMEDIACAO FINANCEIRA, NAO ESPECIFICADAS ANTERIORMENTE',
+        #                 '67.20-2': 'ATIVIDADES AUXILIARES DOS SEGUROS E DA PREVIDENCIA COMPLEMENTAR',
+        #                 '70.10-6': 'INCORPORACAO E COMPRA E VENDA DE IMOVEIS',
+        #                 '70.20-3': 'ALUGUEL DE IMOVEIS',
+        #                 '70.31-9': 'CORRETAGEM E AVALIACAO DE IMOVEIS',
+        #                 '70.32-7': 'ADMINISTRACAO DE IMOVEIS POR CONTA DE TERCEIROS',
+        #                 '70.40-8': 'CONDOMINIOS PREDIAIS',
+        #                 '71.10-2': 'ALUGUEL DE AUTOMOVEIS',
+        #                 '71.21-8': 'ALUGUEL DE OUTROS MEIOS DE TRANSPORTE TERRESTRE',
+        #                 '71.22-6': 'ALUGUEL DE EMBARCACOES',
+        #                 '71.23-4': 'ALUGUEL DE AERONAVES',
+        #                 '71.31-5': 'ALUGUEL DE MAQUINAS E EQUIPAMENTOS AGRICOLAS',
+        #                 '71.32-3': 'ALUGUEL DE MAQUINAS E EQUIPAMENTOS PARA CONSTRUCAO E ENGENHARIA CIVIL',
+        #                 '71.33-1': 'ALUGUEL DE MAQUINAS E EQUIPAMENTOS PARA ESCRITORIOS',
+        #                 '71.39-0': 'ALUGUEL DE MAQUINAS E EQUIPAMENTOS DE OUTROS TIPOS, NAO ESPECIFICADOS ANTERIORMENTE',
+        #                 '71.40-4': 'ALUGUEL DE OBJETOS PESSOAIS E DOMESTICOS',
+        #                 '72.10-9': 'CONSULTORIA EM HARDWARE',
+        #                 '72.21-4': 'DESENVOLVIMENTO E EDICAO DE SOFTWARES PRONTOS PARA USO',
+        #                 '72.29-0': 'DESENVOLVIMENTO DE SOFTWARES SOB ENCOMENDA E OUTRAS CONSULTORIAS EM SOFTWARE',
+        #                 '72.30-3': 'PROCESSAMENTO DE DADOS',
+        #                 '72.40-0': 'ATIVIDADES DE BANCO DE DADOS E DISTRIBUICAO ON-LINE DE CONTEUDO ELETRONICO',
+        #                 '72.50-8': 'MANUTENCAO E REPARACAO DE MAQUINAS DE ESCRITORIO E DE INFORMATICA',
+        #                 '72.90-7': 'OUTRAS ATIVIDADES DE INFORMATICA, NAO ESPECIFICADAS ANTERIORMENTE',
+        #                 '73.10-5': 'PESQUISA E DESENVOLVIMENTO DAS CIENCIAS FISICAS E NATURAIS',
+        #                 '73.20-2': 'PESQUISA E DESENVOLVIMENTO DAS CIENCIAS SOCIAIS E HUMANAS',
+        #                 '74.11-0': 'ATIVIDADES JURIDICAS',
+        #                 '74.12-8': 'ATIVIDADES DE CONTABILIDADE E AUDITORIA',
+        #                 '74.13-6': 'PESQUISAS DE MERCADO E DE OPINIAO PUBLICA',
+        #                 '74.14-4': 'GESTAO DE PARTICIPACOES SOCIETARIAS (HOLDINGS)',
+        #                 '74.15-2': 'SEDES DE EMPRESAS E UNIDADES ADMINISTRATIVAS LOCAIS',
+        #                 '74.16-0': 'ATIVIDADES DE ASSESSORIA EM GESTAO EMPRESARIAL',
+        #                 '74.20-9': 'SERVICOS DE ARQUITETURA E ENGENHARIA E DE ASSESSORAMENTO TECNICO ESPECIALIZADO',
+        #                 '74.30-6': 'ENSAIOS DE MATERIAIS E DE PRODUTOS; ANALISE DE QUALIDADE',
+        #                 '74.40-3': 'PUBLICIDADE',
+        #                 '74.50-0': 'SELECAO, AGENCIAMENTO E LOCACAO DE MAO-DE-OBRA ',
+        #                 '74.60-8': 'ATIVIDADES DE INVESTIGACAO, VIGILÂNCIA E SEGURANCA',
+        #                 '74.70-5': 'ATIVIDADES DE IMUNIZACAO, HIGIENIZACAO E DE LIMPEZA EM PREDIOS E EM DOMICILIOS',
+        #                 '74.91-8': 'ATIVIDADES FOTOGRAFICAS',
+        #                 '74.92-6': 'ATIVIDADES DE ENVASAMENTO E EMPACOTAMENTO, POR CONTA DE TERCEIROS',
+        #                 '74.99-3': 'OUTRAS ATIVIDADES DE SERVICOS PRESTADOS PRINCIPALMENTE AS EMPRESAS, NAO ESPECIFICADAS ANTERIORMENTE',
+        #                 '75.11-6': 'ADMINISTRACAO PUBLICA EM GERAL',
+        #                 '75.12-4': 'REGULACAO DAS ATIVIDADES SOCIAIS E CULTURAIS',
+        #                 '75.13-2': 'REGULACAO DAS ATIVIDADES ECONOMICAS',
+        #                 '75.14-0': 'ATIVIDADES DE APOIO A ADMINISTRACAO PUBLICA',
+        #                 '75.21-3': 'RELACOES EXTERIORES',
+        #                 '75.22-1': 'DEFESA',
+        #                 '75.23-0': 'JUSTICA',
+        #                 '75.24-8': 'SEGURANCA E ORDEM PUBLICA',
+        #                 '75.25-6': 'DEFESA CIVIL',
+        #                 '75.30-2': 'SEGURIDADE SOCIAL',
+        #                 '80.13-6': 'EDUCACAO INFANTIL-CRECHE',
+        #                 '80.14-4': 'EDUCACAO INFANTIL-PRE-ESCOLA',
+        #                 '80.15-2': 'ENSINO FUNDAMENTAL',
+        #                 '80.20-9': 'ENSINO MEDIO',
+        #                 '80.31-4': 'EDUCACAO SUPERIOR - GRADUACAO',
+        #                 '80.32-2': 'EDUCACAO SUPERIOR - GRADUACAO E POS-GRADUACAO',
+        #                 '80.33-0': 'EDUCACAO SUPERIOR - POS-GRADUACAO E EXTENSAO',
+        #                 '80.96-9': 'EDUCACAO PROFISSIONAL DE NIVEL TECNICO',
+        #                 '80.97-7': 'EDUCACAO PROFISSIONAL DE NIVEL TECNOLOGICO',
+        #                 '80.99-3': 'OUTRAS ATIVIDADES DE ENSINO',
+        #                 '85.11-1': 'ATIVIDADES DE ATENDIMENTO HOSPITALAR',
+        #                 '85.12-0': 'ATIVIDADES DE ATENDIMENTO A URGENCIAS E EMERGENCIAS',
+        #                 '85.13-8': 'ATIVIDADES DE ATENCAO AMBULATORIAL',
+        #                 '85.14-6': 'ATIVIDADES DE SERVICOS DE COMPLEMENTACAO DIAGNOSTICA OU TERAPEUTICA',
+        #                 '85.15-4': 'ATIVIDADES DE OUTROS PROFISSIONAIS DA AREA DE SAUDE',
+        #                 '85.16-2': 'OUTRAS ATIVIDADES RELACIONADAS COM A ATENCAO A SAUDE',
+        #                 '85.20-0': 'SERVICOS VETERINARIOS',
+        #                 '85.31-6': 'SERVICOS SOCIAIS COM ALOJAMENTO',
+        #                 '85.32-4': 'SERVICOS SOCIAIS SEM ALOJAMENTO',
+        #                 '90.00-0': 'LIMPEZA URBANA E ESGOTO E ATIVIDADES RELACIONADAS',
+        #                 '91.11-1': 'ATIVIDADES DE ORGANIZACOES EMPRESARIAIS E PATRONAIS',
+        #                 '91.12-0': 'ATIVIDADES DE ORGANIZACOES PROFISSIONAIS',
+        #                 '91.20-0': 'ATIVIDADES DE ORGANIZACOES SINDICAIS',
+        #                 '91.91-0': 'ATIVIDADES DE ORGANIZACOES RELIGIOSAS',
+        #                 '91.92-8': 'ATIVIDADES DE ORGANIZACOES POLITICAS',
+        #                 '91.99-5': 'OUTRAS ATIVIDADES ASSOCIATIVAS, NAO ESPECIFICADAS ANTERIORMENTE',
+        #                 '92.11-8': 'PRODUCAO DE FILMES CINEMATOGRAFICOS E FITAS DE VIDEO',
+        #                 '92.12-6': 'DISTRIBUICAO DE FILMES E DE VIDEOS',
+        #                 '92.13-4': 'PROJECAO DE FILMES E DE VIDEOS',
+        #                 '92.21-5': 'ATIVIDADES DE RADIO',
+        #                 '92.22-3': 'ATIVIDADES DE TELEVISAO',
+        #                 '92.31-2': 'ATIVIDADES DE TEATRO, MUSICA E OUTRAS ATIVIDADES ARTISTICAS E LITERARIAS',
+        #                 '92.32-0': 'GESTAO DE SALAS DE ESPETACULOS',
+        #                 '92.39-8': 'OUTRAS ATIVIDADES DE ESPETACULOS, NAO ESPECIFICADAS ANTERIORMENTE',
+        #                 '92.40-1': 'ATIVIDADES DE AGENCIAS DE NOTICIAS',
+        #                 '92.51-7': 'ATIVIDADES DE BIBLIOTECAS E ARQUIVOS',
+        #                 '92.52-5': 'ATIVIDADES DE MUSEUS E DE CONSERVACAO DO PATRIMONIO HISTORICO',
+        #                 '92.53-3': 'ATIVIDADES DE JARDINS BOTÂNICOS, ZOOLOGICOS, PARQUES NACIONAIS E RESERVAS ECOLOGICAS',
+        #                 '92.61-4': 'ATIVIDADES DESPORTIVAS',
+        #                 '92.62-2': 'OUTRAS ATIVIDADES RELACIONADAS AO LAZER',
+        #                 '93.01-7': 'LAVANDERIAS E TINTURARIAS',
+        #                 '93.02-5': 'CABELEIREIROS E OUTROS TRATAMENTOS DE BELEZA',
+        #                 '93.03-3': 'ATIVIDADES FUNERARIAS E SERVICOS RELACIONADOS',
+        #                 '93.04-1': 'ATIVIDADES DE MANUTENCAO DO FISICO CORPORAL',
+        #                 '93.09-2': 'OUTRAS ATIVIDADES DE SERVICOS PESSOAIS, NAO ESPECIFICADAS ANTERIORMENTE',
+        #                 '95.00-1': 'SERVICOS DOMESTICOS',
+        #                 '99.00-7': 'ORGANISMOS INTERNACIONAIS E OUTRAS INSTITUICOES EXTRATERRITORIAIS'}
+
+    def preenche_tabela_setor_cnae(self):
+        cnae_dao = CnaeDao()
+        setordao = SetorDao()
+        cnae_setordao = CnaeSetorDao()
+        cnaes = cnae_dao.listar()
+        setor = None
+        for cnae in cnaes:
+            if len(remove_caracteres_especiais(cnae.numero)) >= 4:
+                if remove_caracteres_especiais(cnae.numero)[:4] in self.lista_cnae_AD1:
+                    self.salva_relacao_cnae_setor(cnae,'AD1',setordao,cnae_setordao)
+                if remove_caracteres_especiais(cnae.numero)[:4] in self.lista_cnae_AD2:
+                    self.salva_relacao_cnae_setor(cnae,'AD2',setordao,cnae_setordao)
+                if remove_caracteres_especiais(cnae.numero)[:4] in self.lista_cnae_AD3:
+                    self.salva_relacao_cnae_setor(cnae,'AD3',setordao,cnae_setordao)
+                if remove_caracteres_especiais(cnae.numero)[:4] in self.lista_cnae_AD4:
+                    self.salva_relacao_cnae_setor(cnae, 'AD4', setordao, cnae_setordao)
+                if remove_caracteres_especiais(cnae.numero)[:4] in self.lista_cnae_AD5:
+                    self.salva_relacao_cnae_setor(cnae, 'AD5', setordao, cnae_setordao)
+                if remove_caracteres_especiais(cnae.numero)[:4] in self.lista_cnae_pmc1:
+                    self.salva_relacao_cnae_setor(cnae, 'pmc1', setordao, cnae_setordao)
+                if remove_caracteres_especiais(cnae.numero)[:4] in self.lista_cnae_pmc2:
+                    self.salva_relacao_cnae_setor(cnae, 'pmc2', setordao, cnae_setordao)
+                if remove_caracteres_especiais(cnae.numero)[:4] in self.lista_cnae_pmc3:
+                    self.salva_relacao_cnae_setor(cnae, 'pmc3', setordao, cnae_setordao)
+                if remove_caracteres_especiais(cnae.numero)[:4] in self.lista_cnae_pmc4:
+                    self.salva_relacao_cnae_setor(cnae, 'pmc4', setordao, cnae_setordao)
+                if remove_caracteres_especiais(cnae.numero)[:4] in self.lista_cnae_pmc5:
+                    self.salva_relacao_cnae_setor(cnae, 'pmc5', setordao, cnae_setordao)
+                if remove_caracteres_especiais(cnae.numero)[:4] in self.lista_cnae_pmc6:
+                    self.salva_relacao_cnae_setor(cnae, 'pmc6', setordao, cnae_setordao)
+                if remove_caracteres_especiais(cnae.numero)[:4] in self.lista_cnae_pmc7:
+                    self.salva_relacao_cnae_setor(cnae, 'pmc7', setordao, cnae_setordao)
+                if remove_caracteres_especiais(cnae.numero)[:4] in self.lista_cnae_pmc8:
+                    self.salva_relacao_cnae_setor(cnae, 'pmc8', setordao, cnae_setordao)
+                if remove_caracteres_especiais(cnae.numero)[:4] in self.lista_cnae_pmc9:
+                    self.salva_relacao_cnae_setor(cnae, 'pmc9', setordao, cnae_setordao)
+                if remove_caracteres_especiais(cnae.numero)[:4] in self.lista_cnae_pmc10:
+                    self.salva_relacao_cnae_setor(cnae, 'pmc10', setordao, cnae_setordao)
+                if remove_caracteres_especiais(cnae.numero)[:4] in self.lista_cnae_pmc11:
+                    self.salva_relacao_cnae_setor(cnae, 'pmc10', setordao, cnae_setordao)
+            if re.search(self.lista_cnae_industria_transformacao,cnae.numero):
+                self.salva_relacao_cnae_setor(cnae, 'industria transformacao', setordao, cnae_setordao)
+            if re.search(self.lista_cnae_industria_extrativa, cnae.numero):
+                self.salva_relacao_cnae_setor(cnae, 'industria extrativa', setordao, cnae_setordao)
+            if re.search(self.lista_cnae_agricultura, cnae.numero):
+                self.salva_relacao_cnae_setor(cnae, 'AGRICULTURA PECUARIA PRODUCAO FLORESTAL PESCA E AQUICULTURA', setordao, cnae_setordao)
+            if re.search(self.lista_cnae_eletricidade, cnae.numero):
+                self.salva_relacao_cnae_setor(cnae, 'ELETRICIDADE E GAS', setordao, cnae_setordao)
+            if re.search(self.lista_cnae_agua, cnae.numero):
+                self.salva_relacao_cnae_setor(cnae, 'AGUA ESGOTO ATIVIDADES DE GESTAO DE RESIDUOS E DESCONTAMINACAO', setordao, cnae_setordao)
+            if re.search(self.lista_cnae_construcao, cnae.numero):
+                self.salva_relacao_cnae_setor(cnae, 'CONSTRUCAO', setordao, cnae_setordao)
+            if re.search(self.lista_cnae_comercio, cnae.numero):
+                self.salva_relacao_cnae_setor(cnae, 'COMERCIO REPARACAO DE VEICULOS AUTOMOTORES E MOTOCICLETAS', setordao, cnae_setordao)
+            if re.search(self.lista_cnae_transporte, cnae.numero):
+                self.salva_relacao_cnae_setor(cnae, 'TRANSPORTE ARMAZENAGEM E CORREIO', setordao, cnae_setordao)
+            if re.search(self.lista_cnae_alojamento, cnae.numero):
+                self.salva_relacao_cnae_setor(cnae, 'ALOJAMENTO E ALIMENTACAO', setordao, cnae_setordao)
+            if re.search(self.lista_cnae_informacao, cnae.numero):
+                self.salva_relacao_cnae_setor(cnae, 'INFORMACAO E COMUNICACAO', setordao, cnae_setordao)
+            if re.search(self.lista_cnae_atividades_financeiras, cnae.numero):
+                self.salva_relacao_cnae_setor(cnae, 'ATIVIDADES FINANCEIRAS DE SEGUROS E SERVICOS RELACIONADOS', setordao, cnae_setordao)
+            if re.search(self.lista_cnae_atividades_imobiliarias, cnae.numero):
+                self.salva_relacao_cnae_setor(cnae, 'ATIVIDADES IMOBILIARIAS', setordao, cnae_setordao)
+            if re.search(self.lista_cnae_cientifica, cnae.numero):
+                self.salva_relacao_cnae_setor(cnae, 'ATIVIDADES PROFISSIONAIS CIENTIFICAS E TECNICAS', setordao, cnae_setordao)
+            if re.search(self.lista_cnae_atividade_administrativa, cnae.numero):
+                self.salva_relacao_cnae_setor(cnae, 'ATIVIDADES ADMINISTRATIVAS E SERVICOS COMPLEMENTARES', setordao, cnae_setordao)
+            if re.search(self.lista_cnae_administracao, cnae.numero):
+                self.salva_relacao_cnae_setor(cnae, 'ADMINISTRACAO PUBLICA DEFESA E SEGURIDADE SOCIAL', setordao, cnae_setordao)
+            if re.search(self.lista_cnae_educacao, cnae.numero):
+                self.salva_relacao_cnae_setor(cnae, 'EDUCACAO', setordao, cnae_setordao)
+            if re.search(self.lista_cnae_saude, cnae.numero):
+                self.salva_relacao_cnae_setor(cnae, 'SAUDE HUMANA E SERVICOS SOCIAIS', setordao, cnae_setordao)
+            if re.search(self.lista_cnae_artes, cnae.numero):
+                self.salva_relacao_cnae_setor(cnae, 'ARTES CULTURA ESPORTE E RECREACAO', setordao, cnae_setordao)
+            if re.search(self.lista_cnae_outras, cnae.numero):
+                self.salva_relacao_cnae_setor(cnae, 'OUTRAS ATIVIDADES E SERVICOS', setordao, cnae_setordao)
+            if re.search(self.lista_cnae_domestico, cnae.numero):
+                self.salva_relacao_cnae_setor(cnae, 'SERVICOS DOMESTICOS', setordao, cnae_setordao)
+            if re.search(self.lista_cnae_internacional, cnae.numero):
+                self.salva_relacao_cnae_setor(cnae, 'ORGANISMOS INTERNACIONAIS E OUTRAS INSTITUICOES EXTRATERRITORIAIS', setordao, cnae_setordao)
+
+
+    def salva_relacao_cnae_setor(self,cnae,setor,setordao,cnae_setordao):
+        setor = setordao.get_por_nome(setor.upper())
+        cnae_setor = cnae_setordao.get_por_cnae_setor(cnae, setor)
+        if not cnae_setor:
+            cnae_setor = CnaeSetor()
+        cnae_setor.cnae = cnae
+        cnae_setor.setor = setor
+        cnae_setordao.salvar(cnae_setor)
+
+    def preenche_lista_cnae(self,objeto_social,lista_cnae_dic = None,dic_cnae_23=None,dic_cnae_20=None,dic_cnae_10=None):
+        dic_cnae_10,dic_cnae_20,dic_cnae_23,dic_cnae_102,dic_cnae_202,dic_cnae_233 =  {},{},{},{},{},{}
+
+        dic_cnae_10.update(lista_cnae_dic[0])
+        dic_cnae_20.update(lista_cnae_dic[1])
+        dic_cnae_23.update(lista_cnae_dic[2])
+        dic_cnae_102.update(lista_cnae_dic[3])
+        dic_cnae_202.update(lista_cnae_dic[4])
+        dic_cnae_233.update(lista_cnae_dic[5])
+        tupla_validacao = []
+        lista_cnae = []
+        try:
+            #lista_cnae.append([chave for (chave, valor) in self.dic_cnae_23.items() if objeto_social == remove_varios_espacos(remove_caracteres_especiais(remove_acentos(valor)))][0])
+            for chave,valor in dic_cnae_23.items():
+                if valor.search(objeto_social):
+                    lista_cnae.extend([chave])
+                    tupla_validacao.append((objeto_social,chave,valor.pattern))
+            #lista_cnae.extend([chave for (chave, valor) in self.dic_cnae_23.items() if re.search(remove_varios_espacos(remove_caracteres_especiais(remove_acentos(valor))),objeto_social)])
+        except IndexError as e:
+            pass
+        try:
+            #lista_cnae.append([chave for (chave, valor) in self.dic_cnae_20.items() if objeto_social == remove_varios_espacos(remove_caracteres_especiais(remove_acentos(valor)))][0])
+            for chave,valor in dic_cnae_20.items():
+                if valor.search(objeto_social):
+                    lista_cnae.extend([chave])
+                    tupla_validacao.append((objeto_social, chave, valor.pattern))
+            #lista_cnae.extend([chave for (chave, valor) in self.dic_cnae_20.items() if re.search(remove_varios_espacos(remove_caracteres_especiais(remove_acentos(valor))),objeto_social)])
+        except IndexError as e:
+            pass
+        try:
+            #lista_cnae.append([chave for (chave, valor) in self.dic_cnae_10.items() if objeto_social == remove_varios_espacos(remove_caracteres_especiais(remove_acentos(valor)))][0])
+            for chave,valor in dic_cnae_10.items():
+                if valor.search(objeto_social):
+                    lista_cnae.extend([chave])
+                    tupla_validacao.append((objeto_social, chave, valor.pattern))
+            #lista_cnae.extend([chave for (chave, valor) in self.dic_cnae_10.items() if re.search(remove_varios_espacos(remove_caracteres_especiais(remove_acentos(valor))),objeto_social)])
+        except IndexError as e:
+            pass
+        try:
+            #lista_cnae.append([chave for (chave, valor) in self.dic_cnae_23.items() if objeto_social == remove_varios_espacos(remove_caracteres_especiais(remove_acentos(valor)))][0])
+            for chave,valor in dic_cnae_102.items():
+                if valor.search(objeto_social):
+                    lista_cnae.extend([chave])
+                    tupla_validacao.append((objeto_social, chave, valor.pattern))
+            #lista_cnae.extend([chave for (chave, valor) in self.dic_cnae_23.items() if re.search(remove_varios_espacos(remove_caracteres_especiais(remove_acentos(valor))),objeto_social)])
+        except IndexError as e:
+            pass
+
+        try:
+            #lista_cnae.append([chave for (chave, valor) in self.dic_cnae_23.items() if objeto_social == remove_varios_espacos(remove_caracteres_especiais(remove_acentos(valor)))][0])
+            for chave,valor in dic_cnae_202.items():
+                if valor.search(objeto_social):
+                    lista_cnae.extend([chave])
+                    tupla_validacao.append((objeto_social, chave, valor.pattern))
+            #lista_cnae.extend([chave for (chave, valor) in self.dic_cnae_23.items() if re.search(remove_varios_espacos(remove_caracteres_especiais(remove_acentos(valor))),objeto_social)])
+        except IndexError as e:
+            pass
+
+        try:
+            #lista_cnae.append([chave for (chave, valor) in self.dic_cnae_23.items() if objeto_social == remove_varios_espacos(remove_caracteres_especiais(remove_acentos(valor)))][0])
+            for chave,valor in dic_cnae_233.items():
+                if valor.search(objeto_social):
+                    lista_cnae.extend([chave])
+                    tupla_validacao.append((objeto_social, chave, valor.pattern))
+            #lista_cnae.extend([chave for (chave, valor) in self.dic_cnae_23.items() if re.search(remove_varios_espacos(remove_caracteres_especiais(remove_acentos(valor))),objeto_social)])
+        except IndexError as e:
+            pass
+        #df = pd.DataFrame(tupla_validacao)
+
+        # df.to_csv("teste_objetos.csv",header=False,sep =';',index=False,mode='a+')
+        return lista_cnae
+
+    def verifica_cnae(self,objeto_social):
+        arquivo_23 = "/home/b265522227/PycharmProjects/IpeaJUS/classificadores/cnae_23.txt"
+        arquivo_20 = "/home/b265522227/PycharmProjects/IpeaJUS/classificadores/cnae_20.txt"
+        arquivo_10 = "/home/b265522227/PycharmProjects/IpeaJUS/classificadores/cnae_10.txt"
+
+        dic_cnae_10, dic_cnae_20, dic_cnae_23 = self.abre_arquivo_dicionario(arquivo_10, arquivo_20, arquivo_23)
+
+        lista_cnae = self.preenche_lista_cnae(objeto_social,dic_cnae_23,dic_cnae_20,dic_cnae_10)
+
+        arquivo_23 = "/home/b265522227/PycharmProjects/IpeaJUS/classificadores/lista_cnae_23.txt"
+        arquivo_20 = "/home/b265522227/PycharmProjects/IpeaJUS/classificadores/lista_cnae_20.txt"
+        arquivo_10 = "/home/b265522227/PycharmProjects/IpeaJUS/classificadores/lista_cnae_10.txt"
+
+        dic_cnae_10, dic_cnae_20, dic_cnae_23 = self.abre_arquivo_dicionario(arquivo_10, arquivo_20, arquivo_23)
+
+        lista_cnae.extend(self.preenche_lista_cnae(objeto_social,dic_cnae_23,dic_cnae_20,dic_cnae_10))
+
+        return lista_cnae
+
+    def abre_arquivo_dicionario(self,arquivo10,arquivo20,arquivo23):
+
+        arquivo_23 = open(arquivo23)
+        arquivo_20 = open(arquivo20)
+        arquivo_10 = open(arquivo10)
+
+        lista_cnae_23 = arquivo_23.readlines()
+        lista_cnae_20 = arquivo_20.readlines()
+        lista_cnae_10 = arquivo_10.readlines()
+
+        arquivo_23.close()
+        arquivo_20.close()
+        arquivo_10.close()
+
+        dic_cnae_23 = {}
+        dic_cnae_20 = {}
+        dic_cnae_10 = {}
+
+        for cnae_23 in lista_cnae_23:
+            dic_cnae_23[cnae_23.split(':')[0]] = re.compile(
+                cnae_23.split(':')[1].replace('\n', '').replace('\\s', '\s'))
+
+        for cnae_20 in lista_cnae_20:
+            dic_cnae_20[cnae_20.split(':')[0]] = re.compile(
+                cnae_20.split(':')[1].replace('\n', '').replace('\\s', '\s'))
+
+        for cnae_10 in lista_cnae_10:
+            dic_cnae_10[cnae_10.split(':')[0]] = re.compile(
+                cnae_10.split(':')[1].replace('\n', '').replace('\\s', '\s'))
+
+        del (lista_cnae_23)
+        del (lista_cnae_20)
+        del (lista_cnae_10)
+
+        return dic_cnae_10,dic_cnae_20,dic_cnae_23
+
+    def bate_numero_cnae_ibge(self):
+
+        dicionario_objetos_cnaes_completos = {}
+        dicionario_objetos_cnaes_completos.update(self.dic_cnae_10)
+        # dicionario_objetos_cnaes_completos.update(self.dic_cnae_20)
+        # dicionario_objetos_cnaes_completos.update(self.dic_cnae_10)
+
+        print('Serão necessário bater {} CNAES'.format(len(dicionario_objetos_cnaes_completos)))
+
+        for id, cnae in enumerate(dicionario_objetos_cnaes_completos.keys()):
+
+            cnae_batido = False
+
+            if not os.path.exists('../dados/lista_cnae_completa_10.txt'):
+                arq = open('../dados/lista_cnae_completa_10.txt', mode='w+')
+                arq.close()
+
+            arq = open('../dados/lista_cnae_completa_10.txt', encoding='utf-8', mode='r+')
+            linhas_arq = arq.readlines()
+
+            for linha in linhas_arq:
+                if cnae in linha:
+                    print('CNAE {} já batido anteriormente'.format(cnae))
+                    arq.close()
+                    cnae_batido = True
+                    break
+
+            if cnae_batido:
+                continue
+
+            html = self.s.get(self.cnae_10.format(TERMO=cnae))
+
+            soup = bs(html.text, 'html5lib')
+
+            try:
+                tabela = soup.find('table', {'id': 'tbResult'}).find('tbody').find_all('tr')
+            except:
+                print('Não foi possível encontrar o cnae "{}"\n'.format(cnae.replace('+', ' ')))
+                continue
+
+            lista_cnae_descricao = []
+
+            for linha in tabela:
+
+                descricao = re.sub('S\\b','S?',remove_acentos(remove_varios_espacos(linha.find_all('td')[1].text)))
+                lista_descricao = descricao.split(';')
+
+                if len(lista_descricao) > 1:
+                    if ',' in lista_descricao[1] and not re.search('\(.*?,.*\)', lista_descricao[1]):
+                        lista_limpa_com_pipes = remove_varios_espacos(re.sub('[,;<>\/\-\:\!\+\_\=\@\#\%\(\)\[\]]', ' ',remove_acentos(lista_descricao[1].replace(',','|')).replace('| ',' (D[AEO])? |').replace(' ','\s*'))).replace(' D AEO ','(D[AEO])?')+'\\s*(D[AEO])?'
+                        lista_cnae_descricao.append('('+lista_limpa_com_pipes+')'+'\s*'+remove_varios_espacos(re.sub('[,;<>\/\-\:\!\+\_\=\@\#\%\(\)\[\]]', ' ',remove_acentos(lista_descricao[0].replace(' ','\s*')))).replace('\\s* ','\\s*').replace(' \\s*','\\s*').replace(' \\s* ','\\s*'))
+                    else:
+                        lista_cnae_descricao.append(re.sub('[,;<>\/\-\:\!\+\_\=\@\#\%\(\)\[\]]', ' ',remove_varios_espacos(lista_descricao[1]+' (D[AEO])? '+lista_descricao[0])).replace('...',' ').replace('.',' ').replace(' ','\s*').replace(':','').replace('\\s* ','\\s*').replace(' \\s*','\\s*').replace(' \\s* ','\\s*').replace('D\\s*AEO\\s*','(D[AEO])?').replace('\\s*?','\\s*'))
+                else:
+                    lista_cnae_descricao.append(re.sub('[,;<>\/\-\:\!\+\_\=\@\#\%\(\)\[\]]', ' ',descricao.replace(' ','\s*').replace('\\s* ','\\s*').replace(' \\s*','\\s*').replace(' \\s* ','\\s*')))
+
+            print('{} - Foram encontrados {} match para o cnae "{}"'.format(id, len(lista_cnae_descricao), cnae))
+            print(list(map(lambda x: re.sub('\s+','',x.replace('\\s*','\s*')),lista_cnae_descricao)));print()
+
+            arq.close()
+            arq = open('../dados/lista_cnae_completa_10.txt', encoding='utf-8', mode='a+')
+
+            lista_cnae_descricao_join = re.sub('\s+','','|'.join(lista_cnae_descricao).replace('??','?'))
+            arq.writelines(f'{cnae}:({lista_cnae_descricao_join})\n')
+            arq.close()
+
+
+    def atualiza_arquivo(self, numero, usa_arq, nome_arq=None):
+
+        if numero == 23:
+            numero_cnae = self.dic_cnae_23
+        elif numero == 20:
+            numero_cnae = self.dic_cnae_20
+        elif numero == 10:
+            numero_cnae = self.dic_cnae_10
+        else:
+            print('Número Cnae {} inválido'.format(numero))
+
+        for id, cnae in enumerate(numero_cnae.items()):
+
+            if not os.path.exists(f'../dados/lista_cnae_{numero}_v2.txt'):
+                arq = open(f'../dados/lista_cnae_{numero}_v2.txt', mode='w+')
+                arq.close()
+
+            arq = open(f'../dados/lista_cnae_{numero}_v2.txt', encoding='utf-8', mode='a+')
+
+            if usa_arq:
+                arq_cnaes_add = open(nome_arq, encoding='utf-8')
+                split_ponto_virgula = list(map(lambda x: x.split(':'), arq_cnaes_add.readlines()))
+                arq_cnaes_add_read = list(map(lambda x: (re.sub('[\\\/,;<>\.\?\/\!\*\-\+\_\=\@\#%:\(\)'']+|\(\)|^\s+|\s+$','',remove_varios_espacos(remove_acentos(x[1].upper()))).replace(' ','\s*')), split_ponto_virgula))
+
+
+                for n_cnae, descricao in zip(split_ponto_virgula, arq_cnaes_add_read):
+                    descricao = re.sub('S\\b', 'S?', descricao)
+                    print(f'Salvando o cnae - {n_cnae[0]}:({descricao})')
+                    arq.writelines(f'{n_cnae[0]}:({descricao})\n')
+
+
+            cnae_1 = re.sub('[\\\/,;<>\.\?\/\!\*\-\+\_\=\@\#%:\(\)'']+|\(\)|^\s+|\s+$','',remove_varios_espacos(remove_acentos(cnae[1].upper()))).replace(' ','\s*')
+            cnae_1 = re.sub('S\\b', 'S?', cnae_1)
+            print(f'Salvando o cnae - {cnae[0]}:({cnae_1})')
+            arq.writelines(f'{cnae[0]}:({cnae_1})\n')
+            usa_arq = False
+
+        try:
+            arq.close()
+        except:
+            pass
+
+
+    def classifica_objetos_nao_classificados_sem_separador(self):
+
+        from pdjus.dal.ObjetoSocialDao import ObjetoSocialDao
+
+        objetodao = ObjetoSocialDao()
+        objetos_banco = objetodao.listar_objetos_nao_classificados()
+        #objetos_totais_banco = objetodao.listar()
+        id = 0
+        obj_cropado = []
+        cnaes = open('/home/e7609043/Desktop/objetos_cnae_completos.txt', encoding='utf-8').readlines()
+        #f = open('../resultado_split_CNAE.txt', mode='w', encoding='utf-8')
+
+        for objeto in objetos_banco:
+            obj = objeto._nome.strip()
+            if len(obj) <= 6:
+                # OBJETOS MENORES QUE 6 CARACTERES
+                continue
+            if len(re.findall('(COMERCIO\s*VARE(?:[JG])?((IS|SI)TA)?)', obj)) >= 1:
+                # NÃO QUEREMOS COMERCIO VAREJISTA AQUI
+                continue
+
+            for cnae in cnaes:
+                cnae = remove_varios_espacos(remove_caracteres_especiais(remove_acentos(cnae.replace('\n',''))))
+                if cnae in obj:
+                    obj_cropado.append(cnae)
+
+            if obj_cropado:
+
+                id += 1
+                obj_cropado = [re.sub('(\sE\s*$)', '', item) for item in obj_cropado if item != ' ']
+
+                print('{} - Objeto antigo: {}'.format(id, obj))
+                #print('{} - Objeto antigo: {}'.format(id, obj_nao_classificado),file=f,flush=True)
+
+                for item in obj_cropado:
+                    print('{} - Objeto extraído: {}'.format(id, item))
+                    #print('{} - Objeto extraído: {}'.format(id, item),file=f,flush=True)
+                print('\n')
+                #print('\n',file=f,flush=True)
+
+                obj_cropado = []
+
+
+    def classifica_objetos_nao_classificados_com_separador(self):
+
+        from pdjus.dal.ObjetoSocialDao import ObjetoSocialDao
+
+        objetodao = ObjetoSocialDao()
+        objetos_banco = objetodao.listar_objetos_nao_classificados()
+        objetos_totais_banco = objetodao.listar()
+        id = 0
+        obj_cropado = []
+        f = open('../resultado_split_CNAE.txt', mode='w', encoding='utf-8')
+
+        for objeto_banco in objetos_banco:
+            obj_nao_classificado = objeto_banco._nome.strip()
+
+            lista_objetos = re.findall('(COMERCIO\s*VARE(?:[JG])?((IS|SI)TA)?)', obj_nao_classificado)
+
+            if len(lista_objetos) > 1:
+                obj_cropado = re.split('(\s)(?=COMERCIO\s*VARE(?:[JG])?(?:IS|SI?)(?:TA)?)', obj_nao_classificado) # split mantendo o separador
+
+            elif re.search('((?!^)COMERCIO\s*VARE(?:[JG])?((IS|SI)TA)?)', obj_nao_classificado):
+                obj_cropado = re.split('(\s)(?=COMERCIO\s*VARE(?:[JG])?(?:IS|SI?)(?:TA)?)', obj_nao_classificado) # split mantendo o separador
+
+            # else:
+            #     for objeto in objetos_totais_banco:
+            #         obj = objeto._nome.strip()
+            #
+            #         if obj in obj_nao_classificado:
+            #             if len(obj) <= 6:
+            #                 # OBJETOS MENORES QUE 6 CARACTERES
+            #                 continue
+            #             if (obj_nao_classificado.replace(obj, '') == '' or objeto.id == objeto_banco.id):
+            #                 # NÃO DEU MATCH NENHUM NO BANCO
+            #                 continue
+            #             else:
+            #                 obj_cropado.append(obj) #obj_nao_classificado.replace(obj, '')
+
+            if obj_cropado:
+
+                id += 1
+                obj_cropado = [re.sub('(\sE\s*$)', '', item) for item in obj_cropado if item != ' ']
+
+                print('{} - Objeto antigo: {}'.format(id, obj_nao_classificado))
+                #print('{} - Objeto antigo: {}'.format(id, obj_nao_classificado),file=f,flush=True)
+
+                #print('{} - Objeto novo: {}'.format(id, obj_cropado))
+
+                # if type(obj_cropado) == str:
+                #     print('{} - Objeto extraído: {}\n'.format(id, obj))
+                #     print('{} - Objeto extraído: {}\n'.format(id, obj),file=f,flush=True)
+                # else:
+                for item in obj_cropado:
+                    print('{} - Objeto extraído: {}'.format(id, item))
+                    #print('{} - Objeto extraído: {}'.format(id, item),file=f,flush=True)
+                print('\n')
+                #print('\n',file=f,flush=True)
+
+                obj_cropado = None
+                # break
+
+                # if id == 5000:
+                #     print('Total de 5000 objetos varridos')
+                #     quit()
+
+
+    def gera_lista_cnae(self, versao_cnae=None, termo=None):
+
+        if termo and versao_cnae:
+            termo = remove_acentos('+'.join(termo.upper().split(' ')))
+            self.bate_texto_cnae_ibge(versao_cnae, termo)
+
+        else:
+            from pdjus.dal.ObjetoSocialDao import ObjetoSocialDao
+
+            objetodao = ObjetoSocialDao()
+            objetos_banco = objetodao.listar_objetos_nao_classificados_para_teste()
+            arquivo_cnae = open("/home/b265522227/PycharmProjects/IpeaJUS/classificadores/arquivo_cnae.txt",'a+')
+
+            pronto = False
+            for termo in objetos_banco:
+                if termo._nome == "SERVICO DE TREINAMENTO E CAPACITACAO GERENCIAL E PROFISSIONAL INSTRUTOR DE CURSOS GERENCIAIS SERVICOS DE CONSTRUCOES DE FUNDACOES E ESTRUTURAS DE ALVENARIA MESTRE DE OBRAS":
+                    pronto = True
+                if pronto:
+                    objeto = re.sub('\s*CONSTITUICAO\s*\d+', '', termo._nome)
+                    objeto = remove_acentos('+'.join(objeto.upper().split(' ')))
+                    for versao_cnae in ['23', '22', '21', '20', '11', '10']:
+                        lista_cnae_resultado = self.bate_texto_cnae_ibge(versao_cnae, objeto)
+                        if lista_cnae_resultado:
+                            arquivo_cnae.writelines(f'{termo.id};{lista_cnae_resultado}\n')
+            arquivo_cnae.close()
+
+
+
+
+    def bate_texto_cnae_ibge(self, versao_cnae, termo):
+
+        if versao_cnae == '23':
+            html = self.s.get(self.cnae_23.format(TERMO=termo))
+        elif versao_cnae == '22':
+            html = self.s.get(self.cnae_22.format(TERMO=termo))
+        elif versao_cnae == '21':
+            html = self.s.get(self.cnae_21.format(TERMO=termo))
+        elif versao_cnae == '20':
+            html = self.s.get(self.cnae_20.format(TERMO=termo))
+        elif versao_cnae == '11':
+            html = self.s.get(self.cnae_11.format(TERMO=termo))
+        elif versao_cnae == '10':
+            html = self.s.get(self.cnae_10.format(TERMO=termo))
+        else:
+            print('Versão CNAE não implementada')
+            return
+
+        soup = bs(html.text, 'html5lib')
+
+        try:
+            tabela = soup.find('table', {'id': 'tbResult'}).find('tbody').find_all('tr')
+        except:
+            print('Não foi possível encontrar o termo "{}" na busca do cnae {}\n'.format(termo.replace('+', ' '), versao_cnae))
+            return
+
+        lista_cnae_descricao = []
+        lista_cnae = []
+        for linha in tabela:
+            cnae = remove_varios_espacos(linha.find_all('td')[0].text)
+            descricao = remove_caracteres_especiais(remove_acentos(remove_varios_espacos(linha.find_all('td')[1].text)))
+
+            lista_cnae_descricao.append((cnae, descricao))
+            lista_cnae.append(cnae)
+
+        print('Foram encontrados {} match para o termo "{}" no CNAE {}'.format(len(lista_cnae_descricao), termo.replace('+', ' '), versao_cnae))
+        print(lista_cnae_descricao); print()
+
+        return (lista_cnae)
+
+    # def bate_cnaes(self, cnae, item):
+    #
+    #     tupla = self.gera_lista_cnae(versao_cnae=cnae, termo=item.replace('\n', ''))
+    #
+    #     if tupla:
+    #         if tupla[3] == 1:
+    #             file.write(tupla[1] + ';' + item.replace('\n', '') + ';' + tupla[2] + '\n')
+    #             file.flush()
+    #             return
+
+
+    # def verifica_cnae_23(self,objeto):
+    #     [chave for (chave, valor) in self.dic_cnae_23.items() if objeto == valor][0]
+    #     # if objeto in self.dic_cnae_23.values():
+    #     #
+    #     # else:
+    #     #     return None
+    # def verifica_cnae_20(self,objeto):
+    #     for chave in self.dic_cnae_20.values():
+    #         if re.search(remove_caracteres_especiais(chave),objeto):
+    #             return [chave for (chave, valor) in self.dic_cnae_20.items() if re.search(remove_caracteres_especiais(valor),objeto)][0]
+    #         elif re.search(remove_caracteres_especiais(objeto), chave):
+    #                 return [chave for (chave, valor) in self.dic_cnae_20.items() if re.search(remove_caracteres_especiais(objeto), valor)][0]
+    #     # if objeto in self.dic_cnae_20.values():
+    #     #     return [chave for (chave, valor) in self.dic_cnae_20.items() if valor == objeto][0]
+    #     # else:
+    #     #     return None
+    # def verifica_cnae_10(self,objeto):
+    #     for chave in self.dic_cnae_10.values():
+    #         if re.search(remove_caracteres_especiais(chave),objeto):
+    #             return [chave for (chave, valor) in self.dic_cnae_10.items() if re.search(remove_caracteres_especiais(valor),objeto)][0]
+    #         elif re.search(remove_caracteres_especiais(objeto), chave):
+    #             return [chave for (chave, valor) in self.dic_cnae_10.items() if re.search(remove_caracteres_especiais(objeto), valor)][0]
+    #     # if objeto in self.dic_cnae_10.values():
+    #     #     return [chave for (chave, valor) in self.dic_cnae_10.items() if valor == objeto][0]
+    #     # else:
+    #     #     return None
+
+if __name__ == '__main__':
+    c = ClassificaCNAE()
+    # c.verifica_cnae_23('PRODUCAO DE ARAMES DE ACO')
+    #c.classifica_objetos_nao_classificados_sem_separador()
+    c.preenche_tabela_setor_cnae()
+
+
+    # objs_sociais = open('/home/e7609043/Desktop/ipeajus-temp/objs_sociais_jucesp.txt').readlines()
+    #
+    # file = None
+    # if os.path.exists('/home/e7609043/Desktop/ipeajus-temp/matches_jucesp.txt'):
+    #     file = open('/home/e7609043/Desktop/ipeajus-temp/matches_jucesp.txt', mode='a')
+    # else:
+    #     file = open('/home/e7609043/Desktop/ipeajus-temp/matches_jucesp.txt', mode='w')
+    #     file.write('CNAE;' + 'OBJ_BANCO;' + 'OBJ_ENCONTRADO\n')
+    #
+    # for num, item in enumerate(objs_sociais):
+    #     inicio = time.time()
+    #     for cnae in ['23', '22', '21', '20', '11', '10']:
+    #         try:
+    #             c.bate_cnaes(cnae, item)
+    #         except:
+    #             time.sleep(1)
+    #             c.s = requests.Session()
+    #             c.bate_cnaes(cnae, item)
+    #
+    #
+    #     fim = time.time()
+    #     print("{} - Busca em todos os CNAE's em {:2f} segundos".format(num, fim-inicio))
+    #     print('#------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------')
+    #
+    # file.close()
